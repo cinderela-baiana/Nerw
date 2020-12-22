@@ -1,3 +1,5 @@
+from Dataclasses import SingleGuildData
+from typing import Optional
 import discord
 import yaml
 from discord.ext import commands
@@ -8,17 +10,16 @@ client = commands.Bot(command_prefix=',', case_insensitive=True)
 async def on_ready():
     print('bot on')
 
-
 @client.event
 async def on_message(message):
     # canal para o qual vai ser enviado o log da mensagem DM
-    channel = client.get_channel(790744527941009480)
+    el = SingleGuildData.get_instance().channel
 
     # verifica se a mensagem é na DM e envia um embed para o canal escolhido
     if message.guild is None and not message.author.bot:
         embed = discord.Embed(title="Mensagem enviada para a DM do bot", description= message.content, color=0xff0000)
         embed.set_author(name= message.author.name, icon_url= message.author.avatar_url)
-        await channel.send(embed=embed)
+        await el.send(embed=embed)
 
     await client.process_commands(message)
 
@@ -42,12 +43,19 @@ async def dm(ctx, user: discord.Member, *, message:str):
 async def uiui(ctx):
    await ctx.channel.send('gozei')
 
-
 @client.command()
 # manda oi pra pessoa
 async def oibot(ctx):
    await ctx.channel.send('Oieeeeee {}!'.format(ctx.message.author.name))
 
+@client.command(aliases=["channel", "sc"])
+@commands.has_permissions(manage_channels=True)
+async def setchannel(ctx, channel: Optional[discord.TextChannel]):
+
+    inst = SingleGuildData.get_instance()
+    inst.channel = ctx.channel if channel is None else channel
+    await ctx.channel.send('Canal {} adicionado como canal principal de respostas'.format(inst.channel.mention))
+
 with open('credentials.yaml') as t:
     token = yaml.load(t, Loader=yaml.FullLoader)
-client.run(token["token"])
+client.run(token.get("TOKEN"))
