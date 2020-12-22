@@ -36,7 +36,7 @@ async def on_message(message: discord.Message):
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(
-            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando, ainda falta {error.cooldown} para você "
+            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando, ainda falta {error.retry_after} para você "
             "usar o comando novamente."
             )
 
