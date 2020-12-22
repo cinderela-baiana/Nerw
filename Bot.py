@@ -18,13 +18,13 @@ async def on_ready():
 @client.event
 async def on_message(message):
     # canal para o qual vai ser enviado o log da mensagem DM
-    el = SingleGuildData.get_instance().channel
-
+    el = SingleGuildData.get_instance()
     # verifica se o canal de envio foi escolhido, se a mensagem é na DM e envia um embed para o canal escolhido
-    if message.guild == None and not el == None and not message.author.bot:
-        embed = discord.Embed(title="Mensagem enviada para a DM do bot", description= message.content, color=0xff0000)
-        embed.set_author(name= message.author.name, icon_url= message.author.avatar_url)
-        await el.send(embed=embed)
+    if message.guild == None and not message.author.bot:
+        for channel in el.walk_channels(client):
+            embed = discord.Embed(title="Mensagem enviada para a DM do bot", description= message.content, color=0xff0000)
+            embed.set_author(name= message.author.name, icon_url= message.author.avatar_url)
+            await channel.send(embed=embed)
 
     await client.process_commands(message)
 
