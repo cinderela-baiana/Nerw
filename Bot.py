@@ -2,6 +2,7 @@ import discord
 from Dataclasses import SingleGuildData
 from typing import Optional
 import yaml
+import asyncio
 from discord.ext import commands
 
 with open('credentials.yaml') as t:
@@ -76,7 +77,7 @@ async def dm(ctx, user: discord.Member, *, msg: str):
         )
 
         embed.set_author(name=str(user), icon_url=message.author.avatar_url)
-        await ctx.author.send(embed=embed)
+        await user.send(embed=embed)
 
 
 
