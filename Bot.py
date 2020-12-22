@@ -26,9 +26,14 @@ async def on_message(message):
 @client.command()
 # envia uma mensagem para a dm da pessoa mencionada, um embed ensinando a responder e deleta a mensagem do comando
 async def dm(ctx, user: discord.Member, *, message:str):
+    """Envia uma mensagem para a dm da pessoa mencionada.
+    é necessário de que a DM dela esteja aberta.
+    """
     await user.send(message)
     await user.send(embed=discord.Embed(title="Responda seu amigo (ou inimigo) anônimo!", description="Para responder use `,responder <mensagem>`", color=0xff0000))
-    print(message)
+
+    print(message) # cadê a privacidade?????
+
     await ctx.message.delete()
 
 
@@ -45,4 +50,4 @@ async def oibot(ctx):
 
 with open('credentials.yaml') as t:
     token = yaml.load(t, Loader=yaml.FullLoader)
-client.run(token)
+client.run(token["token"])
