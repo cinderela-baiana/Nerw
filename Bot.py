@@ -77,10 +77,7 @@ async def dm(ctx, user: discord.Member, *, msg: str):
         )
 
         embed.set_author(name=str(user), icon_url=message.author.avatar_url)
-        await user.send(embed=embed)
-
-
-
+        await ctx.author.send(embed=embed)
 
 @client.command()
 # estranho
