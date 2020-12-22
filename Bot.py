@@ -32,12 +32,22 @@ async def on_message(message: discord.Message):
 
     await client.process_commands(message)
 
+@client.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(
+            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando, ainda falta {error.cooldown} para você "
+            "usar o comando novamente."
+            )
+
+
 @client.command(pass_context=True)
 async def ping(ctx):
    #Projeto de latência
    await ctx.channel.send('Pong! lantência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency*1000, 1)))
 
 @client.command()
+@commands.cooldown(1, 10.0, commands.BucketType.member)
 # envia uma mensagem para a dm da pessoa mencionada, um embed ensinando a responder e deleta a mensagem do comando
 async def dm(ctx, user: discord.Member, *, msg: str):
     """Envia uma mensagem para a dm da pessoa mencionada.
@@ -72,7 +82,6 @@ async def dm(ctx, user: discord.Member, *, msg: str):
         await ctx.author.send(embed=embed)
 
     await ctx.message.delete()
-
 
 @client.command()
 # estranho
