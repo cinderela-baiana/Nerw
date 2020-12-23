@@ -147,4 +147,22 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
     inst.channel = ctx.channel if channel is None else channel
     await ctx.channel.send(embed=discord.Embed(description='Canal {} adicionado como canal principal de respostas!'.format(inst.channel.mention), color=0xff0000))
 
+                                            #Rodovia, na moral para com esses comentários, só para...
+
+@client.command("channel", "sc")
+@commands.has_permissions(manage_channels=True)
+async def reaction_activate(ctx, msg:str, emoji:Discord.Emoji):
+    """Reaction roles, yay """
+    await client.channel.send(msg)
+    try:
+	    await add_reaction(emoji)
+    except InvalidArgument:
+	    await channel.send("Me desculpe, aparentemente há algo de errado com o seu emoji :sad:")
+    except NotFound:
+	    await channel.send("Emoji não encontrado")
+    except HTTPException:
+	    await channel.send("Algo deu errado:(")
+    else:
+	    await channel.send("Mensagem reagida com sucesso!")
+
 client.run(credentials.get("TOKEN"))
