@@ -1,23 +1,41 @@
 import discord
-from Dataclasses import SingleGuildData
-from typing import Optional
 import yaml
 import asyncio
-from discord.ext import commands
+import logging
+import json
 
+from Dataclasses import SingleGuildData
+from typing import Optional
+from discord.ext import commands, tasks
+from itertools import cycle
+
+logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.default()
-
+with open("activities.json") as fp:
+    activities = cycle(json.load(fp))
 with open('credentials.yaml') as t:
     credentials = yaml.load(t, Loader=yaml.FullLoader)
-
 
 client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
     intents=intents)
 
+@tasks.loop(minutes=5)
+async def presence_setter():
+    payload = next(activities)
+    print(payload, activities)
+    activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
+
+    await client.change_presence(activity=activity, status=payload.get("status", 0))
+
+
 @client.event
 async def on_ready():
     print('Bot pronto')
+    presence_setter.start()
 
+@client.event
+async def on_disconnect():
+    presence_setter.stop()
 
 @client.event
 async def on_message(message):
