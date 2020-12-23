@@ -5,10 +5,14 @@ import yaml
 import asyncio
 from discord.ext import commands
 
+intents = discord.Intents.default()
+
 with open('credentials.yaml') as t:
     credentials = yaml.load(t, Loader=yaml.FullLoader)
-    print (credentials.get("PREFIXO"))
-client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True)
+
+
+client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
+    intents=intents)
 
 @client.event
 async def on_ready():
@@ -24,7 +28,11 @@ async def on_message(message):
         for channel in el.walk_channels(client):
             embed = discord.Embed(title="Mensagem enviada para a DM do bot", description= message.content, color=0xff0000)
             embed.set_author(name= message.author.name, icon_url= message.author.avatar_url)
-            await channel.send(embed=embed)
+            files = []
+            if hasattr(message, "attachments"):
+                files = [await att.to_file() for att in message.attachments]
+
+            await channel.send(embed=embed, files=files)
 
     await client.process_commands(message)
 
@@ -36,6 +44,8 @@ async def on_command_error(ctx, error):
             f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after,0))}s para você "
             "usar o comando novamente."
         )
+    else:
+        print(error)
 
 @client.command(pass_context=True)
 async def ping(ctx):
@@ -76,8 +86,23 @@ async def dm(ctx, user: discord.Member, *, msg: str):
             description=con,
         )
 
+
         embed.set_author(name=str(user), icon_url=message.author.avatar_url)
-        await ctx.author.send(embed=embed)
+        channel = SingleGuildData.get_instance().get_guild_default_channel(credentials.get("SUPPORT_GUILD_ID"))
+        attachments = None
+        if hasattr(message, "attachments"):
+            attachments = "\n".join([attach.to_file() for attach in message.attachments])
+
+        try:
+            await ctx.author.send(embed=embed, files=attachments if attachments is not None else [])
+        except Exception as e:
+            
+            if channel is not None:
+                await channel.send("Algo deu errado durante o ,responder! ", 
+                    embed=discord.Embed(description="```" + str(e) + "```"))
+        else:
+            if channel is not None:
+                await channel.send("Tudo certo durante o ,responder!")
 
 @client.command()
 # estranho
@@ -92,6 +117,8 @@ async def uiui(ctx):
 async def oibot(ctx):
     """Tá carente? Usa esse comando!
     """
+    for member in client.get_all_members():
+        print(member)
     await ctx.channel.send('Oieeeeee {}!'.format(ctx.message.author.name))
 
 @client.command(aliases=["channel", "sc"])
