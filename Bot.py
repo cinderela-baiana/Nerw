@@ -149,7 +149,7 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
 
                                             #Rodovia, na moral para com esses comentários, só para...
 
-@client.command("channel", "sc")
+
 @commands.has_permissions(manage_channels=True)
 async def reaction_activate(ctx, msg:str, emoji:Discord.Emoji):
     """Reaction roles, yay """
