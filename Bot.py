@@ -10,7 +10,7 @@ from discord.ext import commands, tasks
 from itertools import cycle
 
 logging.basicConfig(level=logging.INFO)
-intents = discord.Intents.default()
+intents = discord.Intents.all()
 with open("activities.json") as fp:
     activities = cycle(json.load(fp))
 with open('credentials.yaml') as t:
