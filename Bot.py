@@ -3,11 +3,13 @@ import yaml
 import asyncio
 import logging
 import json
+import traceback
 
 from Dataclasses import SingleGuildData
 from typing import Optional
 from discord.ext import commands, tasks
 from itertools import cycle
+from Tasks import Tasks
 
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.all()
@@ -16,8 +18,9 @@ with open("activities.json") as fp:
 with open('credentials.yaml') as t:
     credentials = yaml.load(t, Loader=yaml.FullLoader)
 
+reaction_messages = {}
 client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
-    intents=intents)
+                      intents=intents)
 
 @tasks.loop(minutes=5)
 async def presence_setter():
@@ -26,16 +29,30 @@ async def presence_setter():
     activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
 
     await client.change_presence(activity=activity, status=payload.get("status", 0))
-
+tas = Tasks(client)
 
 @client.event
 async def on_ready():
     print('Bot pronto')
+    # tas.start_tasks()
     presence_setter.start()
 
 @client.event
 async def on_disconnect():
     presence_setter.stop()
+    tas.stop_tasks()
+
+@client.event
+async def on_raw_reaction_add(struct):
+    if struct.message_id in reaction_messages.keys():
+        role = client.get_guild(struct.guild_id).get_role(reaction_messages[struct.message_id])
+        await struct.member.add_roles(role, atomic=True)
+
+@client.event
+async def on_raw_reaction_remove(struct):
+    if struct.message_id in reaction_messages.keys():
+        role = client.get_guild(struct.guild_id).get_role(reaction_messages[struct.message_id])
+        await struct.member.remove_roles(role, atomic=True)
 
 @client.event
 async def on_message(message):
@@ -44,8 +61,9 @@ async def on_message(message):
     # verifica se o canal de envio foi escolhido, se a mensagem é na DM e envia um embed para o canal escolhido
     if message.guild == None and not message.author.bot:
         for channel in el.walk_channels(client):
-            embed = discord.Embed(title="Mensagem enviada para a DM do bot", description= message.content, color=0xff0000)
-            embed.set_author(name= message.author.name, icon_url= message.author.avatar_url)
+            embed = discord.Embed(title="Mensagem enviada para a DM do bot", description=message.content,
+                                  color=0xff0000)
+            embed.set_author(name=message.author.name, icon_url=message.author.avatar_url)
             files = []
             if hasattr(message, "attachments"):
                 files = [await att.to_file() for att in message.attachments]
@@ -54,21 +72,47 @@ async def on_message(message):
 
     await client.process_commands(message)
 
-
+'''
 @client.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(
-            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after,0))}s para você "
+            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after, 0))}s para você "
             "usar o comando novamente."
         )
     else:
-        print(error)
+        traceback.print_exc()
+'''
+
 
 @client.command(pass_context=True)
 async def ping(ctx):
-   #Projeto de latência
-   await ctx.channel.send('Pong! lantência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency*1000, 1)))
+    # Projeto de latência
+    await ctx.channel.send(
+        'Pong! lantência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency * 1000, 1)))
+
+@client.command()
+@commands.has_permissions(manage_channels=True)
+async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
+        msg: str,
+        emoji: discord.Emoji,
+        role: discord.Role):
+    """Reaction roles, yay """
+    channel = channel if channel is not None else \
+                SingleGuildData.get_instance().get_guild_default_channel(ctx.guild.id)
+    message = await channel.send(msg)
+    try:
+        await message.add_reaction(emoji)
+    except discord.InvalidArgument:
+        await channel.send("Me desculpe, aparentemente há algo de errado com o seu emoji :sad:")
+    except discord.NotFound:
+        await channel.send("Emoji não encontrado")
+    except discord.HTTPException:
+        await channel.send("Algo deu errado:(")
+    else:
+        reaction_messages[message.id] = role.id
+        await channel.send("Mensagem reagida com sucesso!")
+
 
 @client.command()
 @commands.cooldown(1, 10.0, commands.BucketType.member)
@@ -104,7 +148,6 @@ async def dm(ctx, user: discord.Member, *, msg: str):
             description=con,
         )
 
-
         embed.set_author(name=str(user), icon_url=message.author.avatar_url)
         channel = SingleGuildData.get_instance().get_guild_default_channel(credentials.get("SUPPORT_GUILD_ID"))
         attachments = None
@@ -114,13 +157,14 @@ async def dm(ctx, user: discord.Member, *, msg: str):
         try:
             await ctx.author.send(embed=embed, files=attachments if attachments is not None else [])
         except Exception as e:
-            
+
             if channel is not None:
-                await channel.send("Algo deu errado durante o ,responder! ", 
-                    embed=discord.Embed(description="```" + str(e) + "```"))
+                await channel.send("Algo deu errado durante o ,responder! ",
+                                   embed=discord.Embed(description="```" + str(e) + "```"))
         else:
             if channel is not None:
                 await channel.send("Tudo certo durante o ,responder!")
+
 
 @client.command()
 # estranho
@@ -135,34 +179,19 @@ async def uiui(ctx):
 async def oibot(ctx):
     """Tá carente? Usa esse comando!
     """
-    for member in client.get_all_members():
-        print(member)
     await ctx.channel.send('Oieeeeee {}!'.format(ctx.message.author.name))
+
 
 @client.command(aliases=["channel", "sc"])
 @commands.has_permissions(manage_channels=True)
 async def setchannel(ctx, channel: Optional[discord.TextChannel]):
-
     inst = SingleGuildData.get_instance()
     inst.channel = ctx.channel if channel is None else channel
-    await ctx.channel.send(embed=discord.Embed(description='Canal {} adicionado como canal principal de respostas!'.format(inst.channel.mention), color=0xff0000))
+    await ctx.channel.send(embed=discord.Embed(
+        description='Canal {} adicionado como canal principal de respostas!'.format(inst.channel.mention),
+        color=0xff0000))
 
-                                            #Rodovia, na moral para com esses comentários, só para...
+    # Rodovia, na moral para com esses comentários, só para...
 
-
-@commands.has_permissions(manage_channels=True)
-async def reaction_activate(ctx, msg:str, emoji:Discord.Emoji):
-    """Reaction roles, yay """
-    await client.channel.send(msg)
-    try:
-	    await add_reaction(emoji)
-    except InvalidArgument:
-	    await channel.send("Me desculpe, aparentemente há algo de errado com o seu emoji :sad:")
-    except NotFound:
-	    await channel.send("Emoji não encontrado")
-    except HTTPException:
-	    await channel.send("Algo deu errado:(")
-    else:
-	    await channel.send("Mensagem reagida com sucesso!")
 
 client.run(credentials.get("TOKEN"))
