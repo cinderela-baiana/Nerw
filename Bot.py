@@ -143,7 +143,7 @@ async def dm(ctx, user: discord.Member, *, msg: str):
                                         timeout=300.0)
 
     except asyncio.TimeoutError:
-        await user.send("Oh não! VocÊ demorou muito para responder. :sad:")
+        await user.send("Oh não! VocÊ demorou muito para responder. :pensive:")
         pass
 
     else:
