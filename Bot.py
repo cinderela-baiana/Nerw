@@ -10,9 +10,19 @@ from itertools import cycle
 from Tasks import Tasks
 import sys
 import traceback
+import emoji
 
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.all()
+
+async def quit_bot(client, *, system_exit=False):
+    """
+    Fecha o bot.
+    """
+    await client.close()
+    if system_exit:
+        raise SystemExit
+
 
 with open("activities.json") as fp:
     activities = cycle(json.load(fp))
@@ -29,7 +39,6 @@ client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitiv
 @tasks.loop(minutes=5)
 async def presence_setter():
     payload = next(activities)
-    print(payload, activities)
     activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
 
     await client.change_presence(activity=activity, status=payload.get("status", 0))
@@ -105,7 +114,28 @@ async def on_command_error(ctx, error):
 
         await ctx.send(ctx.author.mention, embed=embed)
 
-@client.command(pass_context=True)
+@client.command()
+async def exit(ctx):
+    msg = await ctx.send(f"{ctx.author.mention} Você tem certeza?")
+
+    white_check_mark = emoji.emojize("👋")
+    sos = emoji.emojize("🤙")
+
+    await msg.add_reaction(white_check_mark)
+    await msg.add_reaction(sos)
+    try:
+        def check(reaction, user):
+            nonlocal ctx, msg
+            return reaction.emoji in (white_check_mark, sos) and user == ctx.author and reaction.message == msg
+        reaction, user = await client.wait_for("reaction_add", check=check, timeout=20.0)
+    except asyncio.TimeoutError:
+        pass
+    else:
+        if reaction.emoji == white_check_mark:
+            await ctx.send("Ok :cry:")
+            await quit_bot(client, system_exit=True)
+
+@client.command()
 @commands.cooldown(1, 120.0, commands.BucketType.guild)
 async def textão(ctx):
     with ctx.typing():
@@ -170,7 +200,7 @@ async def enviar(ctx, user: discord.Member, *, msg: str):
 async def temp(ctx):
     raise NotImplementedError("Este")
 
-@client.command(pass_context=True, name='status')
+@client.command(name='status')
 async def status(ctx, user: discord.Member):
     await ctx.channel.send(str(user.status))
 
@@ -210,7 +240,7 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
     except discord.HTTPException:
         await channel.send("Algo deu errado:(")
     else:
-        write_reaction_messages_to_file(channel, message, emoji)s
+        write_reaction_messages_to_file(channel, message, emoji)
         await channel.send("Mensagem reagida com sucesso!")
 
 client.run(credentials.get("TOKEN"))
