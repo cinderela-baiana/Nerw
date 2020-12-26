@@ -1,5 +1,5 @@
 import discord
-from Dataclasses import SingleGuildData
+from Dataclasses import SingleGuildData, write_reaction_messages_to_file
 from typing import Optional
 import yaml
 import asyncio
@@ -17,8 +17,10 @@ with open("activities.json") as fp:
     activities = cycle(json.load(fp))
 with open('credentials.yaml') as t:
     credentials = yaml.load(t, Loader=yaml.FullLoader)
+with open("reaction_messages.yaml") as fp:
+    rm = yaml.safe_load(fp)
 
-reaction_messages = {}
+reaction_messages = rm
 client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
     intents=intents)
 
@@ -152,13 +154,12 @@ async def enviar(ctx, user: discord.Member, *, msg: str):
         )
         await message.add_reaction("👍")
         embed.set_author(name=str(user), icon_url=message.author.avatar_url)
-
+        files = None
         if message.attachments:
-            files = message.attachments[0].url
-            embed.set_image(url=files)
+            files = [await att.to_file() for att in message.attachments]
+            embed.set_image(files=files)
 
-        print("hi")
-        await ctx.author.send(embed=embed)
+        await ctx.author.send(embed=embed, files=files)
 
 
 
@@ -203,7 +204,8 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
     except discord.HTTPException:
         await channel.send("Algo deu errado:(")
     else:
-        reaction_messages[message.id] = role.id
+        write_reaction_messages_to_file(channel, message, emoji)
+        reload_dicts()
         await channel.send("Mensagem reagida com sucesso!")
 
 client.run(credentials.get("TOKEN"))
