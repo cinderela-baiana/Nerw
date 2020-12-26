@@ -8,6 +8,7 @@ import json
 from discord.ext import commands, tasks
 from itertools import cycle
 from Tasks import Tasks
+import sys
 import traceback
 
 logging.basicConfig(level=logging.INFO)
@@ -96,8 +97,13 @@ async def on_command_error(ctx, error):
         await ctx.send(
             f"{ctx.author.mention} usuário não encontrado.", delete_after=5)
         await ctx.message.delete()
+
     else:
-        print(error)
+        descr = f"```{type(error).__name__}: {error}```"
+        embed = discord.Embed(title="Houve um erro ao executar esse commando!",
+                    description=descr, color=discord.Color.dark_theme())
+
+        await ctx.send(ctx.author.mention, embed=embed)
 
 @client.command(pass_context=True)
 @commands.cooldown(1, 120.0, commands.BucketType.guild)
@@ -157,12 +163,12 @@ async def enviar(ctx, user: discord.Member, *, msg: str):
         files = None
         if message.attachments:
             files = [await att.to_file() for att in message.attachments]
-            embed.set_image(files=files)
 
         await ctx.author.send(embed=embed, files=files)
 
-
-
+@commands.command(hidden=True)
+async def temp(ctx):
+    raise NotImplementedError("Este")
 
 @client.command(pass_context=True, name='status')
 async def status(ctx, user: discord.Member):
@@ -204,8 +210,7 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
     except discord.HTTPException:
         await channel.send("Algo deu errado:(")
     else:
-        write_reaction_messages_to_file(channel, message, emoji)
-        reload_dicts()
+        write_reaction_messages_to_file(channel, message, emoji)s
         await channel.send("Mensagem reagida com sucesso!")
 
 client.run(credentials.get("TOKEN"))

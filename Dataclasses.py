@@ -1,6 +1,25 @@
 import discord
 import json
 import os
+import yaml
+
+def write_reaction_messages_to_file(channel, message, emoji):
+    if isinstance(channel, discord.TextChannel):
+        channel = channel.id
+    if isinstance(message, discord.Message):
+        message = message.id
+    if isinstance(emoji, (discord.PartialEmoji, discord.Emoji)):
+        emoji = emoji.id if emoji.id is not None else emoji.name
+        # emojis unicode não tem id
+
+    payload = {
+        channel: {
+            message: emoji
+        }
+    }
+
+    with open("reaction_messages.yaml", "w") as fp:
+        yaml.safe_dump(payload, fp)
 
 class SingleGuildData:
     """
