@@ -60,7 +60,6 @@ async def on_raw_reaction_remove(struct):
         member = guild.get_member(struct.user_id)
         await member.remove_roles(role, atomic=True)
 
-
 @client.event
 async def on_message(message):
     # canal para o qual vai ser enviado o log da mensagem DM
@@ -114,12 +113,13 @@ async def ping(ctx):
 @client.command()
 @commands.cooldown(1, 10.0, commands.BucketType.member)
 # envia uma mensagem para a dm da pessoa mencionada, um embed ensinando a responder e deleta a mensagem do comando
-async def dm(ctx, user: discord.Member, *, msg: str):
+async def enviar(ctx, user: discord.Member, *, msg: str):
     """Envia uma mensagem para a dm da pessoa mencionada.
        é necessário de que a DM dela esteja aberta.
        """
     try:
-        await user.send(msg)
+        files = [await att.to_file() for att in ctx.message.attachments]
+        await user.send(msg, files=files)
         await user.send(embed=discord.Embed(title="Responda seu amigo (ou inimigo) anônimo!",
                                         description="Para responder use `,responder <mensagem>`",
                                         color=0xff0000))
@@ -128,24 +128,20 @@ async def dm(ctx, user: discord.Member, *, msg: str):
     except discord.HTTPException:
         await ctx.message.delete()
         await ctx.send("{} A mensagem não pode ser enviada. Talvez o usuário esteja com a DM bloqueada.".format(ctx.author.mention), delete_after=10)
-    except discord.ext.commands.MemberNotFound():
-        print("po ")
-        await ctx.message.delete()
-        await ctx.send('{} Usuário não encontrado.'.format(ctx.author.mention), delete_after=10)
 
     def check(message):
         msgcon = message.content.startswith(f"{credentials.get('PREFIXO')}responder")
         return message.author.id == user.id and message.guild is None and msgcon
-    # como levar ratelimit passo-a-passo
+
+        # como levar ratelimit passo-a-passo
+
     try:
         message = await client.wait_for("message",
                                         check=check,
                                         timeout=300.0)
-
     except asyncio.TimeoutError:
-        await user.send("Oh não! VocÊ demorou muito para responder. :pensive:")
+        await user.send("Oh não! VocÊ demorou muito para responder. :sad:")
         pass
-
     else:
         con = " ".join(message.content.split(" ")[1:])
 
@@ -154,20 +150,16 @@ async def dm(ctx, user: discord.Member, *, msg: str):
             color=discord.Color.red(),
             description=con,
         )
+        await message.add_reaction("👍")
         embed.set_author(name=str(user), icon_url=message.author.avatar_url)
-        channel = SingleGuildData.get_instance().get_guild_default_channel(credentials.get("SUPPORT_GUILD_ID"))
-        attachments = None
-        if hasattr(message, "attachments"):
-            attachments = "\n".join([attach.to_file() for attach in message.attachments])
-        try:
-            await ctx.author.send(embed=embed, files=attachments if attachments is not None else [])
-        except Exception as e:
-            if channel is not None:
-                await channel.send("Algo deu errado durante o ,responder! ",
-                                   embed=discord.Embed(description="```" + str(e) + "```"))
-        else:
-            if channel is not None:
-                await channel.send("Tudo certo durante o ,responder!")
+
+        if message.attachments:
+            files = message.attachments[0].url
+            embed.set_image(url=files)
+
+        print("hi")
+        await ctx.author.send(embed=embed)
+
 
 
 
