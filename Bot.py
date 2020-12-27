@@ -34,6 +34,7 @@ with open("reaction_messages.yaml") as fp:
 reaction_messages = rm
 client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
     intents=intents)
+client.remove_command("help")
 
 
 @tasks.loop(minutes=5)
