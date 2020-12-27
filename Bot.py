@@ -41,7 +41,7 @@ async def presence_setter():
     payload = next(activities)
     activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
 
-    await client.change_presence(activity=activity, status=payload.get("status", 0))
+    await client.change_presence(activity=activity, status=payload.get("status", "online"))
 tas = Tasks(client)
 
 @client.event
@@ -89,8 +89,10 @@ async def on_message(message):
 
             await channel.send(embed=embed, files=files)
 
-    await client.process_commands(message)
+    if client.user in message.mentions:
+        await message.channel.send(f"{message.author.mention} Oi, meu prefixo é `{credentials.get('PREFIXO')}`")
 
+    await client.process_commands(message)
 
 @client.event
 async def on_command_error(ctx, error):
@@ -102,10 +104,13 @@ async def on_command_error(ctx, error):
         await asyncio.sleep(5)
         await ctx.message.delete()
 
-    elif isinstance(error, discord.ext.commands.MemberNotFound):
+    elif isinstance(error, commands.MemberNotFound):
         await ctx.send(
             f"{ctx.author.mention} usuário não encontrado.", delete_after=5)
         await ctx.message.delete()
+
+    elif isinstance(error, commands.CommandNotFound):
+        pass
 
     else:
         descr = f"```{type(error).__name__}: {error}```"
@@ -114,8 +119,15 @@ async def on_command_error(ctx, error):
 
         await ctx.send(ctx.author.mention, embed=embed)
 
+client.load_extension("Custom_modules")
+
 @client.command()
+@commands.is_owner()
 async def exit(ctx):
+    """Desliga o bot.
+
+    Você precisa ser um do(s) dono(s) do bot para executar o comando.
+    """
     msg = await ctx.send(f"{ctx.author.mention} Você tem certeza?")
 
     white_check_mark = emoji.emojize("👋")
@@ -138,6 +150,7 @@ async def exit(ctx):
 @client.command()
 @commands.cooldown(1, 120.0, commands.BucketType.guild)
 async def textão(ctx):
+    """Faz um textão do tamanho do pinto do João."""
     with ctx.typing():
         await asyncio.sleep(120)
     await ctx.channel.send("lacrei manas")
@@ -153,8 +166,8 @@ async def ping(ctx):
 # envia uma mensagem para a dm da pessoa mencionada, um embed ensinando a responder e deleta a mensagem do comando
 async def enviar(ctx, user: discord.Member, *, msg: str):
     """Envia uma mensagem para a dm da pessoa mencionada.
-       é necessário de que a DM dela esteja aberta.
-       """
+    é necessário de que a DM dela esteja aberta.
+    """
     try:
         files = [await att.to_file() for att in ctx.message.attachments]
         await user.send(msg, files=files)
@@ -172,6 +185,15 @@ async def enviar(ctx, user: discord.Member, *, msg: str):
         return message.author.id == user.id and message.guild is None and msgcon
 
         # como levar ratelimit passo-a-passo
+
+    guild = client.get_guild(790744527450800139)
+    channel = guild.get_channel(790744527941009480)
+
+    enviar_embed = discord.Embed(title=",enviar usado.", description=ctx.message.content,
+                        color=discord.Color.red())
+    enviar_embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
+    await channel.send(embed=enviar_embed)
+
 
     try:
         message = await client.wait_for("message",
@@ -196,27 +218,20 @@ async def enviar(ctx, user: discord.Member, *, msg: str):
 
         await ctx.author.send(embed=embed, files=files)
 
-@commands.command(hidden=True)
-async def temp(ctx):
-    raise NotImplementedError("Este")
-
-@client.command(name='status')
-async def status(ctx, user: discord.Member):
-    await ctx.channel.send(str(user.status))
-
-
 @client.command()
 # manda oi pra pessoa
 async def oibot(ctx):
-    """Tá carente? Usa esse comando!
-    """
+    """Tá carente? Usa esse comando!"""
     await ctx.channel.send('Oieeeeee {}!'.format(ctx.message.author.name))
 
 
 @client.command(aliases=["channel", "sc"])
 @commands.has_permissions(manage_channels=True)
 async def setchannel(ctx, channel: Optional[discord.TextChannel]):
+    """Define o canal padrão para as respostas principais (logs).
 
+    Você precisa da permissão `Gerenciar Canais`.
+    """
     inst = SingleGuildData.get_instance()
     inst.channel = ctx.channel if channel is None else channel
     await ctx.channel.send(embed=discord.Embed(description='Canal {} adicionado como canal principal de respostas!'.format(inst.channel.mention), color=0xff0000))
@@ -227,7 +242,7 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
         msg: str,
         emoji: discord.Emoji,
         role: discord.Role):
-    """Reaction roles, yay """
+    """Sisteminha básico de reaction roles, atualmente suporta apenas 1 reação por mensagem."""
     channel = channel if channel is not None else \
                 SingleGuildData.get_instance().get_guild_default_channel(ctx.guild.id)
     message = await channel.send(msg)
