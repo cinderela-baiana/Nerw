@@ -121,9 +121,24 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.CommandNotFound):
         pass
 
+    elif isinstance(error, (discord.Forbidden, commands.BotMissingPermissions)):
+        embed = discord.Embed(title="Houve um erro ao executar o comando!",
+                description=f"O comando `{ctx.command.name}` finalizou prematuramente"
+                            " devido a minha falta de permissões. \nVerifique se eu tenho"
+                            " as permissões corretas e tente novamente.",
+
+                            color=discord.Color.greyple())
+        if hasattr(error, "code"): # discord.Forbbiden
+            embed.set_footer(text=f"Código do erro: **{error.code}**")
+        else: # commands.BotMissingPermissions
+            missing = ", ".join(error.missing_perms)
+            embed.set_footer(text=f"Permissões faltando: {missing}")
+
+        await ctx.send(ctx.author.mention, embed=embed)
+
     else:
         descr = f"```{type(error).__name__}: {error}```"
-        embed = discord.Embed(title="Houve um erro ao executar esse commando!",
+        embed = discord.Embed(title="Houve um erro ao executar esse comando!",
                     description=descr, color=discord.Color.dark_theme())
 
         await ctx.send(ctx.author.mention, embed=embed)
@@ -167,12 +182,19 @@ async def tempo(ctx, *, cidade: str):
 
 @client.command()
 @commands.has_permissions(ban_members = True)
+@commands.bot_has_permissions(ban_members = True)
 async def ban(ctx, member : discord.Member, *, reason = None):
-    if member == None or member == ctx.message.author:
+    if member == ctx.message.author:
         await ctx.channel.send("Você não pode se banir!")
         return
+
+    embed = embed= discord.Embed(title=f"{client.get_emoji(793335773892968502)} {member} foi banido!",
+                description=f"**Motivo:** *{reason}*",
+                color=0x00ff9d)
+    embed.set_footer(text="Não façam como ele crianças, respeitem as regras.")
+
     await member.ban(reason= reason)
-    await ctx.channel.send(embed= discord.Embed(title=f"{client.get_emoji(793335773892968502)} {member} foi banido!",description=f"**Motivo:** *{reason}*",color=0x00ff9d).set_footer(text="Não façam como ele crianças, respeitem as regras."))
+    await ctx.channel.send(embed=embed)
     await ctx.message.delete()
 
 @client.command()
