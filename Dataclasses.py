@@ -20,6 +20,17 @@ def write_reaction_messages_to_file(channel, message, emoji):
 
     with open("reaction_messages.yaml", "w") as fp:
         yaml.safe_dump(payload, fp)
+        #Adicione o sistema de adição na blacklist pelo geral depois
+def write_blacklist(user):
+
+    if isinstance(user, discord.User):
+        User = user.id
+    blacklist_check={
+	User
+      }
+    
+    with open("BlackList.yaml", "s") as bl:
+        yaml.safe_dump(blacklist_check, bl)
 
 class SingleGuildData:
     """
@@ -81,3 +92,13 @@ class SingleGuildData:
             loaded = json.load(fp)
 
         return loaded.get(str(guild_id), None)
+class global_bot_interactions:
+    def write_person_blacklist(self):
+        mode = "s"
+
+        with open("Blacklisteds.json", mode) as b:
+            persons = {
+               self._user.id
+            }
+
+            json.dump(persons, b, indent=4)
