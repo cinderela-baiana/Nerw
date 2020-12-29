@@ -5,12 +5,18 @@ import yaml
 import asyncio
 import logging
 import json
+import requests
 from discord.ext import commands, tasks
 from itertools import cycle
 from Tasks import Tasks
 import sys
 import traceback
 import emoji
+import datetime
+
+
+apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
+tempourl = "http://api.openweathermap.org/data/2.5/weather?"
 
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.all()
@@ -90,10 +96,11 @@ async def on_message(message):
 
             await channel.send(embed=embed, files=files)
 
-    if client.user in message.mentions:
+    if client.user in message.mentions and message.content == '<@790594153629220894>':
         await message.channel.send(f"{message.author.mention} Oi, meu prefixo é `{credentials.get('PREFIXO')}`")
 
     await client.process_commands(message)
+
 
 @client.event
 async def on_command_error(ctx, error):
@@ -121,6 +128,49 @@ async def on_command_error(ctx, error):
         await ctx.send(ctx.author.mention, embed=embed)
 
 client.load_extension("Custom_modules")
+
+
+@client.command()
+async def tempo(ctx, *, cidade: str):
+    """Verifica o tempo atual na sua cidade
+       """
+    urlcompleta = tempourl + "appid=" + apitempo + "&q=" + cidade + "&lang=pt_br "
+    response = requests.get(urlcompleta)
+    x = response.json()
+
+    if x["cod"] != "404":
+        async with ctx.channel.typing():
+            y = x["main"]
+            current_temperature = y["temp"]
+            current_temperature_celsiuis = str(round(current_temperature - 273.15))
+            current_pressure = y["pressure"]
+            current_humidity = y["humidity"]
+            z = x["weather"]
+            weather_description = z[0]["description"]
+
+            embed = discord.Embed(title=f"Tempo em {cidade}",
+                              color=ctx.guild.me.top_role.color,
+                              timestamp=ctx.message.created_at,)
+            embed.add_field(name="Descrição", value=f"**{weather_description}**", inline=False)
+            embed.add_field(name="Temperatura(C)", value=f"**{current_temperature_celsiuis}°C**", inline=False)
+            embed.add_field(name="Humidade(%)", value=f"**{current_humidity}%**", inline=False)
+            embed.add_field(name="Pressão atmosférica(hPa)", value=f"**{current_pressure}hPa**", inline=False)
+            embed.set_thumbnail(url="https://i.ibb.co/CMrsxdX/weather.png")
+            embed.set_footer(text=f"Requisitado por {ctx.author.name}")
+
+            await ctx.channel.send(embed=embed)
+    else:
+        await ctx.channel.send("Cidade não encontrada.")
+
+@client.command()
+@commands.has_permissions(ban_members = True)
+async def ban(ctx, member : discord.Member, *, reason = None):
+    if member == None or member == ctx.message.author:
+        await ctx.channel.send("Você não pode se banir!")
+        return
+    await member.ban(reason= reason)
+    await ctx.channel.send(embed= discord.Embed(title=f"{client.get_emoji(793335773892968502)} {member} foi banido!",description=f"**Motivo:** *{reason}*",color=0x00ff9d).set_footer(text="Não façam como ele crianças, respeitem as regras."))
+    await ctx.message.delete()
 
 @client.command()
 @commands.is_owner()
@@ -159,8 +209,9 @@ async def textão(ctx):
 
 @client.command(pass_context=True)
 async def ping(ctx):
-   #Projeto de latência
-   await ctx.channel.send('Pong! latência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency*1000, 1)))
+    """Verifica seu ping.
+    """
+    await ctx.channel.send('Pong! latência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency*1000, 1)))
 
 @client.command()
 @commands.cooldown(1, 10.0, commands.BucketType.member)
