@@ -6,6 +6,7 @@ import asyncio
 import logging
 import json
 import requests
+import aiohttp
 from discord.ext import commands, tasks
 from itertools import cycle
 from Tasks import Tasks
@@ -134,11 +135,13 @@ client.load_extension("Custom_modules")
 async def tempo(ctx, *, cidade: str):
     """Verifica o tempo atual na sua cidade
        """
-    urlcompleta = tempourl + "appid=" + apitempo + "&q=" + cidade + "&lang=pt_br "
-    response = requests.get(urlcompleta)
-    x = response.json()
+    urlcompleta = tempourl + "appid=" + apitempo + "&q=" + cidade + "&lang=pt_br"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(urlcompleta) as request:
+            x = await request.json()
+            status_code = request.status
 
-    if x["cod"] != "404":
+    if status_code != 404:
         async with ctx.channel.typing():
             y = x["main"]
             current_temperature = y["temp"]
@@ -153,7 +156,7 @@ async def tempo(ctx, *, cidade: str):
                               timestamp=ctx.message.created_at,)
             embed.add_field(name="Descrição", value=f"**{weather_description}**", inline=False)
             embed.add_field(name="Temperatura(C)", value=f"**{current_temperature_celsiuis}°C**", inline=False)
-            embed.add_field(name="Humidade(%)", value=f"**{current_humidity}%**", inline=False)
+            embed.add_field(name="Humildade(%)", value=f"**{current_humidity}%**", inline=False)
             embed.add_field(name="Pressão atmosférica(hPa)", value=f"**{current_pressure}hPa**", inline=False)
             embed.set_thumbnail(url="https://i.ibb.co/CMrsxdX/weather.png")
             embed.set_footer(text=f"Requisitado por {ctx.author.name}")
