@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import discord
 
-class Misc(commands.Cog, name="Miscelânea"):
+class Help(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
 
@@ -42,4 +42,4 @@ class Misc(commands.Cog, name="Miscelânea"):
 
 
 def setup(client):
-    client.add_cog(Misc(client))
+    client.add_cog(Help(client))
