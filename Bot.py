@@ -66,17 +66,31 @@ async def on_disconnect():
 
 @client.event
 async def on_raw_reaction_add(struct):
-    if struct.message_id in reaction_messages.keys():
-        role = client.get_guild(struct.guild_id).get_role(reaction_messages[struct.message_id])
-
+    with open("reaction_messages.yaml") as fp:
+        rm = yaml.safe_load(fp)
+        reaction_messages = rm
+        rmid = reaction_messages[struct.message_id]
+        rmemoji = (list(rmid.keys())[0])
+    if struct.message_id in reaction_messages.keys() and struct.emoji == client.get_emoji(rmemoji) and struct.member.id != client.user.id:
+        print(reaction_messages)
+        rmid = (list(rmid.values())[0])
+        print(rmid)
+        role = client.get_guild(struct.guild_id).get_role(rmid)
+        print(role)
         await struct.member.add_roles(role, atomic=True)
 
 
 @client.event
 async def on_raw_reaction_remove(struct):
-    if struct.message_id in reaction_messages.keys():
+    with open("reaction_messages.yaml") as fp:
+        rm = yaml.safe_load(fp)
+        reaction_messages = rm
         guild = client.get_guild(struct.guild_id)
-        role = guild.get_role(reaction_messages[struct.message_id])
+        rmid = reaction_messages[struct.message_id]
+        rmemoji = (list(rmid.keys())[0])
+    if struct.message_id in reaction_messages.keys() and struct.emoji == client.get_emoji(rmemoji):
+        rmid = (list(rmid.values())[0])
+        role = guild.get_role(rmid)
         member = guild.get_member(struct.user_id)
         await member.remove_roles(role, atomic=True)
 
@@ -332,7 +346,7 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
     except discord.HTTPException:
         await channel.send("Algo deu errado:(")
     else:
-        write_reaction_messages_to_file(channel, message, emoji)
+        write_reaction_messages_to_file(message.id, emoji.id, role.id)
         await channel.send("Mensagem reagida com sucesso!")
 
 client.run(credentials.get("TOKEN"))
