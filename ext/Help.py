@@ -26,9 +26,10 @@ class Help(commands.Cog):
 
         embed.add_field(name="Descrição", value=command.help if command.help is not None else "Nenhuma ajuda disponível")
         embed.add_field(name="Apelidos", value=alal if alal is not "" else "Nenhum", inline=False)
+        embed.add_field(name="Argumentação", value=f"`{command.name} {command.signature}`", inline=True)
         return embed
 
-    @commands.command(name="poc")
+    @commands.command(name="help")
     async def _help(self, ctx, cmd: Optional[str]):
         """Mostra essa mensagem."""
 

@@ -2,25 +2,34 @@ import discord
 import json
 import os
 import yaml
+import sqlite3
+from Utils import DatabaseWrap, Field
 
-def write_reaction_messages_to_file(channel, message, emoji):
+def write_reaction_messages_to_file(channel, message, emoji, role):
+    connection = sqlite3.connect("main.db")
+    cursor = connection.cursor()
+    wrapp = DatabaseWrap(connection)
+
     if isinstance(channel, discord.TextChannel):
         channel = channel.id
     if isinstance(message, discord.Message):
         message = message.id
     if isinstance(emoji, (discord.PartialEmoji, discord.Emoji)):
-        emoji = emoji.id if emoji.id is not None else emoji.name
-        # emojis unicode não tem id
+        emoji = emoji.name
 
-    payload = {
-        channel: {
-            message: emoji
-        }
-    }
+    fields = (
+                Field(name="channel", type="TEXT"),
+                Field(name="message", type="TEXT"),
+                Field(name="emoji", type="TEXT"),
+                Field(name="role", type="TEXT")
+        )
 
-    with open("reaction_messages.yaml", "w") as fp:
-        yaml.safe_dump(payload, fp)
-        #Adicione o sistema de adição na blacklist pelo geral depois
+    wrapp.create_table_if_absent("reaction_roles", fields)
+
+    cursor.execute("INSERT INTO reaction_roles(channel, message, emoji, role) VALUES(?,?,?,?)",
+                (channel, message, emoji, role))
+    connection.commit()
+
 def write_blacklist(user):
 
     if isinstance(user, discord.User):
@@ -28,7 +37,7 @@ def write_blacklist(user):
     blacklist_check={
 	User
       }
-    
+
     with open("BlackList.yaml", "s") as bl:
         yaml.safe_dump(blacklist_check, bl)
 
@@ -36,18 +45,7 @@ class SingleGuildData:
     """
     Dados que só são úteis em um bot de servidor único.
     """
-    instance = None
-    _channel: discord.TextChannel
 
-    @classmethod
-    def get_instance(cls):
-        if (cls.instance is None):
-            cls.instance = cls()
-
-        return cls.instance
-
-    def __init__(self):
-        self._channel = None
 
     def get_guild_default_channel(self, guild):
         channel_id = self._get_guild_default_channel(str(guild.id))
@@ -92,13 +90,3 @@ class SingleGuildData:
             loaded = json.load(fp)
 
         return loaded.get(str(guild_id), None)
-class global_bot_interactions:
-    def write_person_blacklist(self):
-        mode = "s"
-
-        with open("Blacklisteds.json", mode) as b:
-            persons = {
-               self._user.id
-            }
-
-            json.dump(persons, b, indent=4)

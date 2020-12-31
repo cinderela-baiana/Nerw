@@ -1,28 +1,34 @@
 import discord
-from Dataclasses import SingleGuildData, write_reaction_messages_to_file
-from typing import Optional
 import yaml
 import asyncio
 import logging
 import json
 import requests
 import aiohttp
-from discord.ext import commands, tasks
-from itertools import cycle
-from Tasks import Tasks
 import sys
 import traceback
 import emoji
 import datetime
 import random
 import os
+import sqlite3
 
+from Dataclasses import SingleGuildData, write_reaction_messages_to_file
+from typing import Optional
+from discord.ext import commands, tasks
+from itertools import cycle
+from Tasks import Tasks
+from Utils import DatabaseWrap
 
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
 tempourl = "http://api.openweathermap.org/data/2.5/weather?"
 
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.all()
+
+# evita do bot mencionar everyone e cargos
+allowed_mentions = discord.AllowedMentions(everyone = False, roles=False)
+
 
 async def quit_bot(client, *, system_exit=False):
     """
@@ -42,7 +48,8 @@ with open("config/reaction_messages.yaml") as fp:
 
 reaction_messages = rm
 client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
-    intents=intents)
+                intents=intents, allowed_mentions=allowed_mentions)
+
 client.remove_command("help")
 
 def load_all_extensions(*, folder=None):
@@ -79,54 +86,68 @@ async def on_disconnect():
 
 @client.event
 async def on_raw_reaction_add(struct):
-    with open("reaction_messages.yaml") as fp:
-        rm = yaml.safe_load(fp)
-        reaction_messages = rm
-        rmid = reaction_messages[struct.message_id]
-        rmemoji = (list(rmid.keys())[0])
-    if struct.message_id in reaction_messages.keys() and struct.emoji == client.get_emoji(rmemoji) and struct.member.id != client.user.id:
-        print(reaction_messages)
-        rmid = (list(rmid.values())[0])
-        print(rmid)
-        role = client.get_guild(struct.guild_id).get_role(rmid)
-        print(role)
-        await struct.member.add_roles(role, atomic=True)
+    if struct.guild_id is None:
+       return # ignorar DMs
+
+    wrap = DatabaseWrap.from_filepath("main.db")
+    item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
+    print(item)
+    if item is not None:
+        channel_id, message_id, emoji, role_id = item[0]
+
+        guild = client.get_guild(struct.guild_id)
+        channel = guild.get_channel(struct.channel_id)
+        member = guild.get_member(struct.user_id)
+        role = guild.get_role(role_id)
+
+        if emoji == str(struct.emoji) and message_id == struct.message_id:
+            await member.add_roles(role, reason="Reaction Roles.", atomic=True)
+
 
 
 @client.event
-async def on_raw_reaction_remove(struct):
-    with open("reaction_messages.yaml") as fp:
-        rm = yaml.safe_load(fp)
-        reaction_messages = rm
+async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
+    if struct.guild_id is None:
+        return # ignorar DMs
+
+    wrap = DatabaseWrap.from_filepath("main.db")
+    item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
+    print(item)
+    if item is not None:
+
+        channel_id, message_id, emoji, role_id = item[0]
         guild = client.get_guild(struct.guild_id)
-        rmid = reaction_messages[struct.message_id]
-        rmemoji = (list(rmid.keys())[0])
-    if struct.message_id in reaction_messages.keys() and struct.emoji == client.get_emoji(rmemoji):
-        rmid = (list(rmid.values())[0])
-        role = guild.get_role(rmid)
+        channel = guild.get_channel(struct.channel_id)
         member = guild.get_member(struct.user_id)
-        await member.remove_roles(role, atomic=True)
+        role = guild.get_role(int(role_id))
+
+        print(int(message_id) == struct.message_id)
+        if int(message_id) == struct.message_id:
+            await member.add_roles(role, reason="Reaction Roles.", atomic=True)
+
+@client.event
+async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
+    if struct.guild_id is None:
+        return # ignorar DMs
+
+    wrap = DatabaseWrap.from_filepath("main.db")
+    item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
+    print(item)
+    if item is not None:
+
+        channel_id, message_id, emoji, role_id = item[0]
+        guild = client.get_guild(struct.guild_id)
+        channel = guild.get_channel(struct.channel_id)
+        member = guild.get_member(struct.user_id)
+        role = guild.get_role(int(role_id))
+
+        print(int(message_id) == struct.message_id)
+        if int(message_id) == struct.message_id:
+            await member.remove_roles(role, reason="Reaction Roles.", atomic=True)
+
 
 @client.event
 async def on_message(message):
-    # canal para o qual vai ser enviado o log da mensagem DM
-    el = SingleGuildData.get_instance()
-
-    # verifica se o canal de envio foi escolhido, se a mensagem é na DM e envia um embed para o canal escolhido
-    if message.guild == None and not message.author.bot:
-        for channel in el.walk_channels(client):
-            embed = discord.Embed(title="Mensagem enviada para a DM do bot", description=message.content,
-                                  color=0xff0000)
-            embed.set_author(name=message.author.name, icon_url=message.author.avatar_url)
-            files = []
-            if hasattr(message, "attachments"):
-                files = [await att.to_file() for att in message.attachments]
-
-            await channel.send(embed=embed, files=files)
-
-    if client.user in message.mentions and message.content == '<@790594153629220894>':
-        await message.channel.send(f"{message.author.mention} Oi, meu prefixo é `{credentials.get('PREFIXO')}`")
-
     await client.process_commands(message)
 
 
@@ -152,7 +173,7 @@ async def on_command_error(ctx, error):
         embed = discord.Embed(title="Houve um erro ao executar o comando!",
                 description=f"O comando `{ctx.command.name}` finalizou prematuramente"
                             " devido a minha falta de permissões. \nVerifique se eu tenho"
-                            " as permissões e hierarquia de cargo corretas e tente novamente.",
+                            " as permissões e hierarquia de cargos corretas e tente novamente.",
 
                             color=discord.Color.greyple())
 
@@ -171,9 +192,6 @@ async def on_command_error(ctx, error):
                     description=descr, color=discord.Color.dark_theme())
 
         await ctx.send(ctx.author.mention, embed=embed)
-
-client.load_extension("Custom_modules")
-
 
 @client.command()
 async def tempo(ctx, *, cidade: str):
@@ -276,8 +294,6 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
         emoji: discord.Emoji,
         role: discord.Role):
     """Sisteminha básico de reaction roles, atualmente suporta apenas 1 reação por mensagem."""
-    channel = channel if channel is not None else \
-                SingleGuildData.get_instance().get_guild_default_channel(ctx.guild.id)
     message = await channel.send(msg)
     try:
         await message.add_reaction(emoji)
@@ -288,7 +304,7 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
     except discord.HTTPException:
         await channel.send("Algo deu errado:(")
     else:
-        write_reaction_messages_to_file(message.id, emoji.id, role.id)
+        write_reaction_messages_to_file(channel.id, message.id, emoji.id, role.id)
         await channel.send("Mensagem reagida com sucesso!")
 
 client.run(credentials.get("TOKEN"))
