@@ -33,31 +33,38 @@ def toggle_next():
     client.loop.call_soon_threadsafe(play_next_song.set)
 
 
-
 @client.command(aliases=["p", "pl"])
 async def play(ctx, *, query):
     channel = ctx.message.author.voice.channel
     FFMPEG_OPTS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-    def search(query):
-        with youtube_dl.YoutubeDL({'format': 'bestaudio', 'noplaylist':'True'}) as ydl:
-            try: info = ydl.extract_info(query, download=False)
-            except: info = ydl.extract_info("ytsearch:{}".format(query), download=False)['entries'][0]
-            ctx.send('Now playing {}')
-        return (info, info['formats'][0]['url'])
+    with youtube_dl.YoutubeDL({'format': 'bestaudio', 'noplaylist':'True'}) as ydl:
+        if query.startswith("www.") or query.startswith("https:"):
+            info = ydl.extract_info(query, download=False)
+            embedVar = discord.Embed(title="Escutando", description="Escutando com os parças [{}]()".format(info['title']).format(info['url']), color=0x00ff00)
+            await ctx.channel.send(embed=embedVar)
+        else:
+            info = ydl.extract_info("ytsearch:{}".format(query), download=False)['entries'][0]
+            embedVar = discord.Embed(title="Escutando", description="Escutando com os parças [{}]()".format(info['title']).format(info['url']), color=0x00ff00)
+            await ctx.channel.send(embed=embedVar)
+    video, source = (info, info['formats'][0]['url'])
     
-    video, source = search(query)
     
-    if  channel.connect().is_connected:
-         voice.play(FFmpegPCMAudio(source, **FFMPEG_OPTS), after=lambda e: print('done', e))
-         voice.is_playing()
+    
+    try:voice = await channel.connect()
+    except discord.ClientException:
+        voice.play(FFmpegPCMAudio(source, **FFMPEG_OPTS), after=lambda e: ctx.send('Música', e))
+        voice.is_playing()
     else:
-         voice = await channel.connect() 
+        voice.play(FFmpegPCMAudio(source, **FFMPEG_OPTS), after=lambda e: print('done', e))
+        voice.is_playing()
+            
+        
+          
     
     
             
 @client.command(aliases=["lv", "disconnect"])
 async def leave(ctx):
-        connected=False
         await ctx.voice_client.disconnect()
 
 
