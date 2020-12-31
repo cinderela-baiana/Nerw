@@ -13,7 +13,7 @@ import random
 import os
 import sqlite3
 
-from Dataclasses import SingleGuildData, write_reaction_messages_to_file
+from Dataclasses import SingleGuildData, write_reaction_messages_to_file, write_blacklist
 from typing import Optional
 from discord.ext import commands, tasks
 from itertools import cycle
@@ -197,6 +197,8 @@ async def on_command_error(ctx, error):
 async def tempo(ctx, *, cidade: str):
     """Verifica o tempo atual na sua cidade
        """
+    if ctx.author.name in blacklisteds:
+        return
     urlcompleta = tempourl + "appid=" + apitempo + "&q=" + cidade + "&lang=pt_br"
     async with aiohttp.ClientSession() as session:
         async with session.get(urlcompleta) as request:
@@ -234,7 +236,8 @@ async def ban(ctx, member : discord.Member, *, reason = None):
     if member == ctx.message.author:
         await ctx.channel.send("Você não pode se banir!")
         return
-
+    if ctx.author.name in blacklisteds:
+        return
     embed = embed= discord.Embed(title=f"{client.get_emoji(793335773892968502)} {member} foi banido!",
                 description=f"**Motivo:** *{reason}*",
                 color=0x00ff9d)
@@ -251,6 +254,8 @@ async def exit(ctx):
 
     Você precisa ser um do(s) dono(s) do bot para executar o comando.
     """
+    if ctx.author.name in blacklisteds:
+        return
     msg = await ctx.send(f"{ctx.author.mention} Você tem certeza?")
 
     white_check_mark = emoji.emojize("👋")
@@ -274,6 +279,8 @@ async def exit(ctx):
 async def ping(ctx):
     """Verifica seu ping.
     """
+    if ctx.author.name in blacklisteds:
+        return
     await ctx.channel.send('Pong! latência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency*1000, 1)))
 
 @client.command(aliases=["channel", "sc"])
@@ -283,6 +290,8 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
 
     Você precisa da permissão `Gerenciar Canais`.
     """
+    if ctx.author.name in blacklisteds:
+        return
     inst = SingleGuildData.get_instance()
     inst.channel = ctx.channel if channel is None else channel
     await ctx.channel.send(embed=discord.Embed(description='Canal {} adicionado como canal principal de respostas!'.format(inst.channel.mention), color=0xff0000))
@@ -294,6 +303,8 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
         emoji: discord.Emoji,
         role: discord.Role):
     """Sisteminha básico de reaction roles, atualmente suporta apenas 1 reação por mensagem."""
+    if ctx.author.name in blacklisteds:
+        return
     message = await channel.send(msg)
     try:
         await message.add_reaction(emoji)
@@ -306,5 +317,13 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
     else:
         write_reaction_messages_to_file(channel.id, message.id, emoji.id, role.id)
         await channel.send("Mensagem reagida com sucesso!")
-
+                              
+@client.command()
+@commands.is_owner()
+async def blacklist(ctx, user):
+    """Deixa uma pessoa na lista negra"""
+    """Só criadores do Bot podem usar-la"""
+    await ctx.channel.send("{}, Ninguém mandou desobedecer as regulanentações otário".format(user))
+    write_blacklist(user)
+                              
 client.run(credentials.get("TOKEN"))
