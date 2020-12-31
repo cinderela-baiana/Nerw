@@ -35,11 +35,11 @@ def write_blacklist(user):
     if isinstance(user, discord.User):
         User = user.id
     blacklist_check={
-	User
+    User
       }
-
-    with open("BlackList.yaml", "s") as bl:
-        yaml.safe_dump(blacklist_check, bl)
+    
+    with open("Blacklisteds.json", "w") as bl:
+            json.dump(blacklist_check, bl, indent=0)
 
 class SingleGuildData:
     """
