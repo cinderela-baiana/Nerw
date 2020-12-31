@@ -103,8 +103,6 @@ async def on_raw_reaction_add(struct):
         if emoji == str(struct.emoji) and message_id == struct.message_id:
             await member.add_roles(role, reason="Reaction Roles.", atomic=True)
 
-
-
 @client.event
 async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
     if struct.guild_id is None:
@@ -124,27 +122,6 @@ async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
         print(int(message_id) == struct.message_id)
         if int(message_id) == struct.message_id:
             await member.add_roles(role, reason="Reaction Roles.", atomic=True)
-
-@client.event
-async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
-    if struct.guild_id is None:
-        return # ignorar DMs
-
-    wrap = DatabaseWrap.from_filepath("main.db")
-    item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
-    print(item)
-    if item is not None:
-
-        channel_id, message_id, emoji, role_id = item[0]
-        guild = client.get_guild(struct.guild_id)
-        channel = guild.get_channel(struct.channel_id)
-        member = guild.get_member(struct.user_id)
-        role = guild.get_role(int(role_id))
-
-        print(int(message_id) == struct.message_id)
-        if int(message_id) == struct.message_id:
-            await member.remove_roles(role, reason="Reaction Roles.", atomic=True)
-
 
 @client.event
 async def on_message(message):
