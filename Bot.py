@@ -12,13 +12,16 @@ import datetime
 import random
 import os
 import sqlite3
+import chatterbot
 
+from chatterbot.trainers import ChatterBotCorpusTrainer
 from Dataclasses import SingleGuildData, write_reaction_messages_to_file, write_blacklist
 from typing import Optional
 from discord.ext import commands, tasks
 from itertools import cycle
 from Tasks import Tasks
 from Utils import DatabaseWrap
+
 
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
 tempourl = "http://api.openweathermap.org/data/2.5/weather?"
@@ -42,11 +45,8 @@ async def quit_bot(client, *, system_exit=False):
 with open("config/activities.json") as fp:
     activities = cycle(json.load(fp))
 with open('config/credentials.yaml') as t:
-    credentials = yaml.load(t, Loader=yaml.FullLoader)
-with open("config/reaction_messages.yaml") as fp:
-    rm = yaml.safe_load(fp)
+    credentials = yaml.load(t)
 
-reaction_messages = rm
 client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
                 intents=intents, allowed_mentions=allowed_mentions)
 
@@ -294,7 +294,7 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
     else:
         write_reaction_messages_to_file(channel.id, message.id, emoji.id, role.id)
         await channel.send("Mensagem reagida com sucesso!")
-                              
+
 @client.command()
 @commands.is_owner()
 async def blacklist(ctx, user):
@@ -302,5 +302,5 @@ async def blacklist(ctx, user):
     """Só criadores do Bot podem usar-la"""
     await ctx.channel.send("{}, Ninguém mandou desobedecer as regulanentações otário".format(user))
     write_blacklist(user)
-                              
+
 client.run(credentials.get("TOKEN"))
