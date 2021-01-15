@@ -215,7 +215,10 @@ async def ban(ctx, member : discord.Member, *, reason = None):
         return
     if ctx.author.name in blacklisteds:
         return
-    embed = embed= discord.Embed(title=f"{client.get_emoji(793335773892968502)} {member} foi banido!",
+    emoji = client.get_emoji(793335773892968502)
+    if emoji is None:
+        emoji = "🔨"
+    embed = embed= discord.Embed(title=f"{emoji} {member} foi banido!",
                 description=f"**Motivo:** *{reason}*",
                 color=0x00ff9d)
     embed.set_footer(text="Não façam como ele crianças, respeitem as regras.")
