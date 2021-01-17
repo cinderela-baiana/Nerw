@@ -15,7 +15,7 @@ import sqlite3
 import chatterbot
 
 from chatterbot.trainers import ChatterBotCorpusTrainer
-from Dataclasses import SingleGuildData, write_reaction_messages_to_file, write_blacklist
+from dataclasses import SingleGuildData, write_reaction_messages_to_file, write_blacklist
 from typing import Optional
 from discord.ext import commands, tasks
 from itertools import cycle
@@ -23,7 +23,7 @@ from Tasks import Tasks
 from Utils import DatabaseWrap, Field
 from chatter_thread import ChatterThread
 from chatterbot import ChatBot
-
+from errors import UserBlacklisted
 
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
 tempourl = "http://api.openweathermap.org/data/2.5/weather?"
@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.all()
 
 # evita do bot mencionar everyone e cargos
-allowed_mentions = discord.AllowedMentions(everyone = False, roles=False)
+allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)
 
 
 async def quit_bot(client, *, system_exit=False):
@@ -50,18 +50,20 @@ with open('config/credentials.yaml') as t:
     credentials = yaml.load(t)
 
 client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
-                intents=intents, allowed_mentions=allowed_mentions)
+                      intents=intents, allowed_mentions=allowed_mentions)
 
 client.remove_command("help")
+
 
 def load_all_extensions(*, folder=None):
     """Carrega todas as extensões."""
 
     if folder is None:
         folder = "ext"
-    filt = filter(lambda fold : fold.endswith(".py") and not fold.startswith("_"), os.listdir(folder))
+    filt = filter(lambda fold: fold.endswith(".py") and not fold.startswith("_"), os.listdir(folder))
     for file in filt:
         client.load_extension(f"{folder}.{file.replace('.py', '')}")
+
 
 load_all_extensions()
 
@@ -72,7 +74,10 @@ async def presence_setter():
     activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
 
     await client.change_presence(activity=activity, status=payload.get("status", "online"))
+
+
 tas = Tasks(client)
+
 
 @client.event
 async def on_connect():
@@ -83,9 +88,9 @@ async def on_connect():
 
 @client.event
 async def on_ready():
-     print('Bot pronto')
-     # tas.start_tasks()
-     presence_setter.start()
+    logging.info('Bot pronto como ' + str(client.user))
+    # tas.start_tasks()
+    presence_setter.start()
 
 
 @client.event
@@ -94,18 +99,28 @@ async def on_disconnect():
     client.chat_thread.stop()
 
 
+@client.check
+async def blacklist(ctx):
+    connection = DatabaseWrap.from_filepath("main.db")
+    item = connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
+    print(item)
+    if item is None:
+        return True
+    raise UserBlacklisted
+
+
 @client.event
 async def on_raw_reaction_add(struct):
     if struct.guild_id is None:
-       return # ignorar DMs
+        return  # ignorar DMs
 
     wrap = DatabaseWrap.from_filepath("main.db")
 
     fields = (
-                Field(name="channel", type="TEXT"),
-                Field(name="message", type="TEXT"),
-                Field(name="emoji", type="TEXT"),
-                Field(name="role", type="TEXT")
+        Field(name="channel", type="TEXT"),
+        Field(name="message", type="TEXT"),
+        Field(name="emoji", type="TEXT"),
+        Field(name="role", type="TEXT")
     )
 
     wrap.create_table_if_absent("reaction_roles", fields)
@@ -125,10 +140,11 @@ async def on_raw_reaction_add(struct):
         if emoji == str(struct.emoji) and message_id == struct.message_id:
             await member.add_roles(role, reason="Reaction Roles.", atomic=True)
 
+
 @client.event
 async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
     if struct.guild_id is None:
-        return # ignorar DMs
+        return  # ignorar DMs
 
     wrap = DatabaseWrap.from_filepath("main.db")
     item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
@@ -149,6 +165,7 @@ async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
         if int(message_id) == struct.message_id:
             await member.add_roles(role, reason="Reaction Roles.", atomic=True)
 
+
 @client.event
 async def on_message(message):
     await client.process_commands(message)
@@ -158,7 +175,7 @@ async def on_message(message):
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(
-            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after,0))}s para você "
+            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after, 0))}s para você "
             "usar o comando novamente.", delete_after=5
         )
         await asyncio.sleep(5)
@@ -174,16 +191,15 @@ async def on_command_error(ctx, error):
 
     elif isinstance(error, (discord.Forbidden, commands.BotMissingPermissions)):
         embed = discord.Embed(title="Houve um erro ao executar o comando!",
-                description=f"O comando `{ctx.command.name}` finalizou prematuramente"
-                            " devido a minha falta de permissões. \nVerifique se eu tenho"
-                            " as permissões e hierarquia de cargos corretas e tente novamente.",
+                              description=f"O comando `{ctx.command.name}` finalizou prematuramente"
+                                          " devido a minha falta de permissões. \nVerifique se eu tenho"
+                                          " as permissões e hierarquia de cargos corretas e tente novamente.",
+                              color=discord.Color.greyple())
 
-                            color=discord.Color.greyple())
-
-        if hasattr(error, "code"): # discord.Forbbiden
+        if hasattr(error, "code"):  # discord.Forbbiden
             embed.set_footer(text=f"Código do erro: **{error.code}**")
 
-        elif hasattr(error, "missing_perms"): # commands.BotMissingPermissions
+        elif hasattr(error, "missing_perms"):  # commands.BotMissingPermissions
             missing = ", ".join(error.missing_perms)
             embed.set_footer(text=f"Permissões faltando: **{missing}**")
 
@@ -193,19 +209,26 @@ async def on_command_error(ctx, error):
         command = client.get_command("help")
         await ctx.invoke(command, ctx.command.name)
 
+    elif isinstance(error, UserBlacklisted):
+        connection = DatabaseWrap.from_filepath("main.db")
+        reason = connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", "reason")
+        if reason is None:
+            reason = "Nenhum..."
+
+        await ctx.reply("Saia, você entrou pra lista negra. Motivo: **{reason}**")
+
     else:
         descr = f"```{type(error).__name__}: {error}```"
         embed = discord.Embed(title="Houve um erro ao executar esse comando!",
-                    description=descr, color=discord.Color.dark_theme())
+                              description=descr, color=discord.Color.dark_theme())
 
         await ctx.send(ctx.author.mention, embed=embed)
+
 
 @client.command()
 async def tempo(ctx, *, cidade: str):
     """Verifica o tempo atual na sua cidade
        """
-    if ctx.author.name in blacklisteds:
-        return
     urlcompleta = tempourl + "appid=" + apitempo + "&q=" + cidade + "&lang=pt_br"
     async with aiohttp.ClientSession() as session:
         async with session.get(urlcompleta) as request:
@@ -223,8 +246,8 @@ async def tempo(ctx, *, cidade: str):
             weather_description = z[0]["description"]
 
             embed = discord.Embed(title=f"Tempo em {cidade}",
-                              color=ctx.guild.me.top_role.color,
-                              timestamp=ctx.message.created_at,)
+                                  color=ctx.guild.me.top_role.color,
+                                  timestamp=ctx.message.created_at, )
             embed.add_field(name="Descrição", value=f"**{weather_description}**", inline=False)
             embed.add_field(name="Temperatura(C)", value=f"**{current_temperature_celsiuis}°C**", inline=False)
             embed.add_field(name="Humildade(%)", value=f"**{current_humidity}%**", inline=False)
@@ -236,11 +259,12 @@ async def tempo(ctx, *, cidade: str):
     else:
         await ctx.channel.send("Cidade não encontrada.")
 
+
 @client.command()
 @commands.cooldown(1, 20, commands.BucketType.member)
 async def selfmute(ctx, seconds: int):
     message = await ctx.send("Você quando usar esse comando, fique ciente de que será mutado."
-                "\n\nNão vá na DM de nenhum Ajudante/Moderador reclamar de que não sabia que iria ser.")
+                             "\n\nNão vá na DM de nenhum Ajudante/Moderador reclamar de que não sabia que iria ser.")
 
     await message.add_reaction("👎")
     await message.add_reaction("👍")
@@ -260,7 +284,7 @@ async def selfmute(ctx, seconds: int):
         await ctx.author.remove_roles(role)
 
 async def mute_user(ctx, user):
-    role = discord.utils.find(lambda item : item.name == "Muted", ctx.guild.roles)
+    role = discord.utils.find(lambda item: item.name == "Muted", ctx.guild.roles)
 
     if role is None:
         role = await ctx.guild.create_role(name="Muted", permissions=discord.Permissions(send_messages=False))
@@ -274,23 +298,21 @@ async def remove_roles(ctx, user: discord.Member, role: discord.Role):
     await user.remove_roles(role)
 
 @client.command()
-@commands.has_permissions(ban_members = True)
-@commands.bot_has_permissions(ban_members = True)
-async def ban(ctx, member : discord.Member, *, reason = None):
+@commands.has_permissions(ban_members=True)
+@commands.bot_has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member, *, reason=None):
     if member == ctx.message.author:
         await ctx.channel.send("Você não pode se banir!")
-        return
-    if ctx.author.name in blacklisteds:
         return
     emoji = client.get_emoji(793335773892968502)
     if emoji is None:
         emoji = "🔨"
-    embed = embed= discord.Embed(title=f"{emoji} {member} foi banido!",
-                description=f"**Motivo:** *{reason}*",
-                color=0x00ff9d)
+    embed = embed = discord.Embed(title=f"{emoji} {member} foi banido!",
+                                  description=f"**Motivo:** *{reason}*",
+                                  color=0x00ff9d)
     embed.set_footer(text="Não façam como ele crianças, respeitem as regras.")
 
-    await member.ban(reason= reason)
+    await member.ban(reason=reason)
     await ctx.channel.send(embed=embed)
     await ctx.message.delete()
 
@@ -312,6 +334,7 @@ async def exit(ctx):
         def check(reaction, user):
             nonlocal ctx, msg
             return reaction.emoji in (white_check_mark, sos) and user == ctx.author and reaction.message == msg
+
         reaction, user = await client.wait_for("reaction_add", check=check, timeout=20.0)
     except asyncio.TimeoutError:
         pass
@@ -320,13 +343,13 @@ async def exit(ctx):
             await ctx.send("Ok :cry:")
             await quit_bot(client, system_exit=True)
 
-@client.command(pass_context=True)
+
+@client.command()
 async def ping(ctx):
-    """Verifica seu ping.
-    """
-    if ctx.author.name in blacklisteds:
-        return
-    await ctx.channel.send('Pong! latência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency*1000, 1)))
+    """Verifica seu ping."""
+    await ctx.channel.send(
+        'Pong! latência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency * 1000, 1)))
+
 
 @client.command(aliases=["channel", "sc"])
 @commands.has_permissions(manage_channels=True)
@@ -335,21 +358,20 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
 
     Você precisa da permissão `Gerenciar Canais`.
     """
-    if ctx.author.name in blacklisteds:
-        return
     inst = SingleGuildData.get_instance()
     inst.channel = ctx.channel if channel is None else channel
-    await ctx.channel.send(embed=discord.Embed(description='Canal {} adicionado como canal principal de respostas!'.format(inst.channel.mention), color=0xff0000))
+    await ctx.channel.send(embed=discord.Embed(
+        description='Canal {} adicionado como canal principal de respostas!'.format(inst.channel.mention),
+        color=0xff0000))
+
 
 @client.command()
 @commands.has_permissions(manage_channels=True)
 async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
-        msg: str,
-        emoji: discord.Emoji,
-        role: discord.Role):
+                            msg: str,
+                            emoji: discord.Emoji,
+                            role: discord.Role):
     """Sisteminha básico de reaction roles, atualmente suporta apenas 1 reação por mensagem."""
-    if ctx.author.name in blacklisteds:
-        return
     message = await channel.send(msg)
     try:
         await message.add_reaction(emoji)
@@ -363,12 +385,27 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
         write_reaction_messages_to_file(channel.id, message.id, emoji.id, role.id)
         await channel.send("Mensagem reagida com sucesso!")
 
+
 @client.command()
 @commands.is_owner()
-async def blacklist(ctx, user):
+async def lex(ctx, *, extension: str):
+    client.load_extension(f"ext.{extension}")
+    await ctx.reply("Extensão carregada :+1:")
+
+
+@client.command()
+@commands.is_owner()
+async def unlex(ctx, *, extension: str):
+    client.unload_extension(f"ext.{extension}")
+    await ctx.reply("Extensão descarregada :+1:")
+
+
+@client.command()
+@commands.is_owner()
+async def blacklist(ctx, user: discord.Member, *, reason: str = None):
     """Deixa uma pessoa na lista negra"""
-    """Só criadores do Bot podem usar-la"""
-    await ctx.channel.send("{}, Ninguém mandou desobedecer as regulanentações otário".format(user))
-    write_blacklist(user)
+    await ctx.reply(f"O usuário {user} foi banido de usar o bot.")
+    write_blacklist(user, reason)
+
 
 client.run(credentials.get("TOKEN"))

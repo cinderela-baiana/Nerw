@@ -12,10 +12,15 @@ class Help(commands.Cog):
         if command is None:
             raise ValueError
 
+        if isinstance(ctx.me, discord.ClientUser):
+            color = discord.Color.from_rgb(230, 0, 0)
+        else:
+            color = ctx.me.color
+
         aliases_copy = deepcopy(command.aliases)
         embed = discord.Embed(title=command.name,
                 description=command.usage,
-                color=ctx.author.color)
+                color=color)
         try:
             aliases_copy.remove(ctx.invoked_with)
         except ValueError:

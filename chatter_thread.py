@@ -20,8 +20,10 @@ class StoppableThread(threading.Thread):
     def stop(self):
         self._stop_event.set()
 
+    @property
     def stopped(self):
         return self._stop_event.is_set()
+
 
 class ChatterThread(StoppableThread):
     def __init__(self, chatterbot):
@@ -31,6 +33,7 @@ class ChatterThread(StoppableThread):
         self.name = "Chatter"
         self.trained = False
         self._chatbot = chatterbot
+        self._usable = False
 
     @property
     def chat(self):
@@ -40,29 +43,35 @@ class ChatterThread(StoppableThread):
     def chat_setter(self, _):
         raise AttributeError("A propriedade 'chat' é apenas para leitura.")
 
+    @property
+    def usable(self):
+        return self._usable
+
+    @usable.setter
+    def usable_setter(self, _):
+        raise AttributeError("A propriedade 'usable' é apenas para leitura.")
+
     def train(self):
         logger.info("Começando o treinamento do ChatBot.")
 
-        trainer = ChatterBotCorpusTrainer(self._chatbot)
+        trainer = ChatterBotCorpusTrainer(self._chatbot, show_training_progress=False)
         try:
             if not self.trained:
                 trainer.train("chatterbot.corpus.portuguese")
                 self.trained = True
         except Exception as e:
-            logger.error("Houve um erro durante o treinamento do bot!", exc_info=True)
+            logger.critical("Houve um erro durante o treinamento do bot!", exc_info=True)
+            self._usable = False
             return
         else:
+            self._usable = True
             logger.info("ChatBot pronto!")
 
-    def generate_response(self, question: str, then_learn=False):
+    def generate_response(self, question: str):
         logger.debug("Gerando resposta para a pergunta '" + question + "'")
 
         awns = self.chat.generate_response(question)
         logging.debug("Resposta gerada: " + awns)
-
-        if then_learn:
-            correct = Statement(text=awns)
-            self.chat.learn_response(correct, Statement(text=question))
 
         return awns
 
@@ -71,4 +80,9 @@ class ChatterThread(StoppableThread):
         if not self.trained:
             self.train()
 
+    def stop(self):
+        super().stop()
 
+        self.trained = False
+        self._chatbot = None
+        self._usable = False

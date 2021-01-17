@@ -1,6 +1,8 @@
 """Algumas utilidades."""
 
 from collections import namedtuple
+from discord.ext import commands
+
 import sqlite3
 
 Field = namedtuple("Field", ("name", "type"))
@@ -38,9 +40,17 @@ class DatabaseWrap:
 
         sql = f"""SELECT {item_name} FROM {table_name} WHERE {where}"""
         self.cursor.execute(sql)
-        fetched = self.cursor.fetchall()
+        fetched = self.cursor.fetchone()
 
         return fetched
 
+def is_blacklisted():
+    connection = DatabaseWrap.from_filepath("main.db")
 
+    async def actual(ctx):
+        item = connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
+
+        return item is None
+
+    return commands.check(actual)
 

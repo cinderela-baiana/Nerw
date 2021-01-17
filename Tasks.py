@@ -1,5 +1,5 @@
 from discord.ext import tasks
-from Dataclasses import SingleGuildData
+from dataclasses import SingleGuildData
 
 
 class Tasks:

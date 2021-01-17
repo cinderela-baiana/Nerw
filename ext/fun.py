@@ -13,7 +13,7 @@ class Fun(commands.Cog):
 
     @commands.command()
     @commands.cooldown(1, 15, commands.BucketType.member)
-    async def chatbot(ctx, *, texto: str):
+    async def chatbot(self, ctx, *, texto: str):
         async with ctx.channel.typing():
             resposta = self.client.chatter_thread.generate_response(pergunta)
 
@@ -57,9 +57,40 @@ class Fun(commands.Cog):
             await asyncio.sleep(5)
             await ctx.guild.unban(memb, reason="Tinha sido banido pelo ,banrandom")
 
-    @commands.command()
+    @commands.command(name="kickrandom", aliases=["kickr"])
+    @commands.has_guild_permissions(kick_members=True)
+    @commands.bot_has_guild_permissions(kick_members=True)
+    async def kickrandom(self, ctx):
+        """Bane alguém aleatóriamente"""
+
+        client = self.client
+
+        msg = await ctx.send("Fique atento de que o bot vai **realmente expulsar alguém**...\nPronto?")
+        await msg.add_reaction("👎")
+        await msg.add_reaction("👍")
+
+        try:
+            def react(reaction, user):
+                return reaction.emoji in ["👍", "👎"] and user.id == ctx.author.id and reaction.message.id == msg.id
+            reaction, user = await client.wait_for("reaction_add", check=react, timeout=30.0)
+        except asyncio.TimeoutError:
+            await ctx.send("comando cancelado.")
+        else:
+            if reaction.emoji == "👎":
+                await ctx.send("comando cancelado.")
+                return
+            invite = random.choice(await ctx.guild.invites())
+
+            memb = random.choice(list(filter(lambda member : member.top_role < ctx.me.top_role, ctx.guild.members)))
+            await ctx.send(f"Eu escolhi {memb} pra ser expulso :smiling_imp:...")
+
+            await memb.send(f"Oi, você foi banido do `{ctx.guild.name}`, pelo comando kick, tente entrar no servidor usando esse convite: {invite.url}")
+            await memb.kick(reason=f"expulso devido ao comando ,banrandom executado por {ctx.author}")
+            await ctx.send(f"{ctx.author.mention} ele foi expulso.")
+
+    @commands.command(aliases=["textao"])
     @commands.cooldown(1, 120.0, commands.BucketType.guild)
-    async def textão(ctx):
+    async def textão(self, ctx):
         """Faz um textão do tamanho do pinto do João."""
         with ctx.typing():
             await asyncio.sleep(120)
@@ -72,17 +103,15 @@ class Misc(commands.Cog):
 
     @commands.command()
     # manda oi pra pessoa
-    async def oibot(ctx):
+    async def oibot(self, ctx):
         """Tá carente? Usa esse comando!"""
         await ctx.channel.send('Oieeeeee {}!'.format(ctx.message.author.name))
 
     @commands.command()
     @commands.cooldown(1, 10.0, commands.BucketType.member)
-    # envia uma mensagem para a dm da pessoa mencionada, um embed ensinando a responder e deleta a mensagem do comando
-    async def enviar(ctx, user: discord.Member, *, msg: str):
+    async def enviar(self, ctx, user: discord.Member, *, msg: str):
         """Envia uma mensagem para a dm da pessoa mencionada.
-        é necessário de que a DM dela esteja aberta.
-        """
+        é necessário de que a DM dela esteja aberta."""
         try:
             files = [await att.to_file() for att in ctx.message.attachments]
             await user.send(msg, files=files)
@@ -92,14 +121,13 @@ class Misc(commands.Cog):
             await ctx.message.delete()
 
         except discord.HTTPException:
-            await ctx.message.delete()
-            await ctx.send("{} A mensagem não pode ser enviada. Talvez o usuário esteja com a DM bloqueada.".format(ctx.author.mention), delete_after=10)
+            await ctx.reply("A mensagem não pôde ser enviada. Talvez o usuário esteja com a DM bloqueada.", delete_after=10)
 
         def check(message):
-            msgcon = message.content.startswith(f"{credentials.get('PREFIXO')}responder")
+            msgcon = message.content.startswith(",responder")
             return message.author.id == user.id and message.guild is None and msgcon
 
-        guild = client.get_guild(790744527450800139)
+        guild = self.client.get_guild(790744527450800139)
         channel = guild.get_channel(790744527941009480)
 
         enviar_embed = discord.Embed(title=",enviar usado.", description=ctx.message.content,
@@ -109,7 +137,7 @@ class Misc(commands.Cog):
 
 
         try:
-            message = await client.wait_for("message",
+            message = await self.client.wait_for("message",
                                             check=check,
                                             timeout=300.0)
         except asyncio.TimeoutError:

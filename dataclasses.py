@@ -30,16 +30,24 @@ def write_reaction_messages_to_file(channel, message, emoji, role):
                 (channel, message, emoji, role))
     connection.commit()
 
-def write_blacklist(user):
+def write_blacklist(user, reason=None):
+    if isinstance(user, (discord.User, discord.Member)):
+        user = user.id
 
-    if isinstance(user, discord.User):
-        User = user.id
-    blacklist_check={
-    User
-      }
-    
-    with open("Blacklisteds.json", "w") as bl:
-            json.dump(blacklist_check, bl, indent=0)
+    connection = sqlite3.connect("main.db")
+    cursor = connection.cursor()
+    wrapp = DatabaseWrap(connection)
+
+    fields = (
+        Field(name="user_id", type="TEXT NOT NULL"),
+        Field(name="reason", type="TEXT")
+    )
+
+    wrapp.create_table_if_absent("blacklisteds", fields)
+
+    cursor.execute("INSERT INTO blacklisteds(user_id, reason) VALUES(?,?)",
+                (str(user), reason))
+    connection.commit()
 
 class SingleGuildData:
     """
