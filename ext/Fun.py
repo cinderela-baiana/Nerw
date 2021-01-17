@@ -4,45 +4,50 @@ from chatterbot.trainers import ChatterBotCorpusTrainer
 from chatterbot.conversation import Statement
 
 import discord
+import asyncio
+import random
 
 class Fun(commands.Cog):
     def __init__(self, client):
         self.client = client
-        self.client.chatter = ChatBot("Eurinopé")
-        self.train.start()
+#        self.client.chatter = ChatBot("Eurinopé")
+#        self.train.start()
+    '''
+        @tasks.loop(seconds=1, count=1)
+        async def train(self):
+            #trainer = ChatterBotCorpusTrainer(self.client.chatbot)
+            #trainer.train("chatterbot.corpus.portuguese")
 
-    @tasks.loop(seconds=1, count=1)
-    async def train(self):
-        trainer = ChatterBotCorpusTrainer(self.client.chatbot)
-        trainer.train("chatterbot.corpus.portuguese")
+        @train.before_loop
+        async def before_train(self):
+            self.client.last_statements = {}
+            await self.client.wait_until_ready()
 
-    @train.before_loop
-    async def before_train(self):
-        self.client.last_statements = {}
-        await self.client.wait_until_ready()
-
-    @commands.command()
-    async def chatbot(ctx, *, texto: str):
-        async with ctx.channel.typing():
-            resposta = self.client.chatbot.generate_response(Statement(text=pergunta))
+        @commands.command()
+        async def chatbot(ctx, *, texto: str):
+            async with ctx.channel.typing():
+                resposta = self.client.chatbot.generate_response(Statement(text=pergunta))
 
 
-            await ctx.channel.send(f"{ctx.author.mention} " + str(resposta))
+                await ctx.channel.send(f"{ctx.author.mention} " + str(resposta))
 
-            self.client.last_statements[ctx.author.id] = texto
-
+                self.client.last_statements[ctx.author.id] = texto
+    '''
     @commands.command(name="banrandom", aliases=["banc"])
     @commands.has_guild_permissions(ban_members=True)
     @commands.bot_has_guild_permissions(ban_members=True)
-    async def randomban(ctx):
+    async def randomban(self, ctx):
         """Bane alguém aleatóriamente"""
+
+        client = self.client
+
         msg = await ctx.send("Fique atento de que o bot vai **realmente banir alguém**...\nPronto?")
         await msg.add_reaction("👎")
         await msg.add_reaction("👍")
 
         try:
             def react(reaction, user):
-                return reaction.emoji in ["👍 ", " 👎"] and user == ctx.author and reaction.message == msg
+                return reaction.emoji in ["👍", "👎"] and user.id == ctx.author.id and reaction.message.id == msg.id
             reaction, user = await client.wait_for("reaction_add", check=react, timeout=30.0)
         except asyncio.TimeoutError:
             await ctx.send("comando cancelado.")
@@ -50,13 +55,20 @@ class Fun(commands.Cog):
             if reaction.emoji == "👎":
                 await ctx.send("comando cancelado.")
                 return
+            invite = random.choice(await ctx.guild.invites())
 
+            memb = random.choice(list(filter(lambda member : member.top_role < ctx.me.top_role, ctx.guild.members)))
+            await ctx.send(f"Eu escolhi {memb} pra ser banido :smiling_imp:...")
 
-            memb = random.choice(filter(lambda member : member.top_role < ctx.me.top_role))
-            await ctx.send(f"{ctx.author.mention} Eu escolhi {memb} pra ser banido :smiling_imp:...")
+            await memb.send(f"Oi, você foi banido do `{ctx.guild.name}`, pelo comando banrandom, "
+                        "daqui a 5 segundos, tente entrar no servidor usando esse convite: {invite.url}")
+
             await memb.ban(reason=f"Banido devido ao comando ,banrandom executado por {ctx.author}")
 
-            await ctx.send("{ctx.author.mention} ele foi banido.")
+            await ctx.send(f"{ctx.author.mention} ele foi banido.")
+
+            await asyncio.sleep(5)
+            await ctx.guild.unban(memb, reason="Tinha sido banido pelo ,banrandom")
 
     @commands.command()
     @commands.cooldown(1, 120.0, commands.BucketType.guild)

@@ -98,7 +98,7 @@ class Chess(commands.Cog):
 
         display = "CPU"
         if userplayer is not None and isinstance(userplayer, discord.Member):
-            ov[userplayer] = discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            ov[userplayer] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
             print(userplayer)
             display = userplayer.display_name
 

@@ -20,7 +20,7 @@ from typing import Optional
 from discord.ext import commands, tasks
 from itertools import cycle
 from Tasks import Tasks
-from Utils import DatabaseWrap
+from Utils import DatabaseWrap, Field
 
 
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
@@ -90,10 +90,22 @@ async def on_raw_reaction_add(struct):
        return # ignorar DMs
 
     wrap = DatabaseWrap.from_filepath("main.db")
+
+    fields = (
+                Field(name="channel", type="TEXT"),
+                Field(name="message", type="TEXT"),
+                Field(name="emoji", type="TEXT"),
+                Field(name="role", type="TEXT")
+    )
+
+    wrap.create_table_if_absent("reaction_roles", fields)
     item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
-    print(item)
+
     if item is not None:
-        channel_id, message_id, emoji, role_id = item[0]
+        try:
+            channel_id, message_id, emoji, role_id = item[0]
+        except IndexError:
+            return
 
         guild = client.get_guild(struct.guild_id)
         channel = guild.get_channel(struct.channel_id)
@@ -110,10 +122,14 @@ async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
 
     wrap = DatabaseWrap.from_filepath("main.db")
     item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
-    print(item)
+
     if item is not None:
 
-        channel_id, message_id, emoji, role_id = item[0]
+        try:
+            channel_id, message_id, emoji, role_id = item[0]
+        except IndexError:
+            return
+
         guild = client.get_guild(struct.guild_id)
         channel = guild.get_channel(struct.channel_id)
         member = guild.get_member(struct.user_id)
@@ -207,6 +223,38 @@ async def tempo(ctx, *, cidade: str):
         await ctx.channel.send("Cidade não encontrada.")
 
 @client.command()
+@commands.cooldown(1, 20, commands.BucketType.member)
+async def selfmute(ctx, seconds: int):
+    message = await ctx.send("Você quando usar esse comando, fique ciente de que será mutado."
+                "\n\nNão vá na DM de nenhum Ajudante/Moderador reclamar de que não sabia que iria ser.")
+
+    await message.add_reaction("👎")
+    await message.add_reaction("👍")
+
+    def check(reaction, user):
+        return reaction.message.id == message.id and user == ctx.author and reaction.emoji in ("👍", "👎")
+
+    try:
+        reaction, user = await client.wait_for("reaction_add", check=check, timeout=60.0)
+    except asyncio.TimeoutError:
+        return
+    else:
+        role = await mute_user(ctx, ctx.author)
+
+        await ctx.reply(":ok_hand:")
+        await asyncio.sleep(seconds)
+        await ctx.author.remove_roles(role)
+
+async def mute_user(ctx, user):
+    role = discord.utils.find(lambda item : item.name == "Muted", ctx.guild.roles)
+
+    if role is None:
+        role = await ctx.guild.create_role(name="Muted", permissions=discord.Permissions(send_messages=False))
+
+    await user.add_roles(role)
+    return role
+
+@client.command()
 @commands.has_permissions(ban_members = True)
 @commands.bot_has_permissions(ban_members = True)
 async def ban(ctx, member : discord.Member, *, reason = None):
@@ -234,8 +282,6 @@ async def exit(ctx):
 
     Você precisa ser um do(s) dono(s) do bot para executar o comando.
     """
-    if ctx.author.name in blacklisteds:
-        return
     msg = await ctx.send(f"{ctx.author.mention} Você tem certeza?")
 
     white_check_mark = emoji.emojize("👋")
