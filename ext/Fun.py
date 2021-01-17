@@ -10,29 +10,16 @@ import random
 class Fun(commands.Cog):
     def __init__(self, client):
         self.client = client
-#        self.client.chatter = ChatBot("Eurinopé")
-#        self.train.start()
-    '''
-        @tasks.loop(seconds=1, count=1)
-        async def train(self):
-            #trainer = ChatterBotCorpusTrainer(self.client.chatbot)
-            #trainer.train("chatterbot.corpus.portuguese")
 
-        @train.before_loop
-        async def before_train(self):
-            self.client.last_statements = {}
-            await self.client.wait_until_ready()
+    @commands.command()
+    @commands.cooldown(1, 15, commands.BucketType.member)
+    async def chatbot(ctx, *, texto: str):
+        async with ctx.channel.typing():
+            resposta = self.client.chatter_thread.generate_response(pergunta)
 
-        @commands.command()
-        async def chatbot(ctx, *, texto: str):
-            async with ctx.channel.typing():
-                resposta = self.client.chatbot.generate_response(Statement(text=pergunta))
+            await ctx.channel.send(f"{ctx.author.mention} " + str(resposta))
+            self.client.last_statements[ctx.author.id] = texto
 
-
-                await ctx.channel.send(f"{ctx.author.mention} " + str(resposta))
-
-                self.client.last_statements[ctx.author.id] = texto
-    '''
     @commands.command(name="banrandom", aliases=["banc"])
     @commands.has_guild_permissions(ban_members=True)
     @commands.bot_has_guild_permissions(ban_members=True)

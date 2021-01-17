@@ -13,9 +13,6 @@ from discord.ext import menus
 
 logging.basicConfig(level=logging.INFO)
 
-with open('config/credentials.yaml') as t:
-    credentials = yaml.load(t)
-
 brd = {}
 alias = {}
 channels = {}
@@ -23,6 +20,7 @@ channels = {}
 class Chess(commands.Cog):
 
     def __init__(self, client):
+        logging.info("Carregando engine do xadrez")
         self.client = client
         self.engine = chess.engine.SimpleEngine.popen_uci("stockfish.exe")
         logging.info("engine do xadrez carregada!")
@@ -81,7 +79,7 @@ class Chess(commands.Cog):
             alias[self.client.user.id] = ctx.author.id
             alias[ctx.author.id] = ctx.author.id
             brd[ctx.author.id] = chess.Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'), white, black, 'pc'
-            await imageboard(ctx, list(brd[ctx.author.id])[0])
+            await self.imageboard(ctx, list(brd[ctx.author.id])[0])
 
             logging.info("Nova partida de xadrez criada.")
 

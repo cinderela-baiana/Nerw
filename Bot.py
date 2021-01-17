@@ -21,6 +21,8 @@ from discord.ext import commands, tasks
 from itertools import cycle
 from Tasks import Tasks
 from Utils import DatabaseWrap, Field
+from chatter_thread import ChatterThread
+from chatterbot import ChatBot
 
 
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
@@ -73,6 +75,13 @@ async def presence_setter():
 tas = Tasks(client)
 
 @client.event
+async def on_connect():
+    client.chatbot = ChatBot("Iguaçu")
+    client.chat_thread = ChatterThread(client.chatbot)
+    client.chat_thread.start()
+
+
+@client.event
 async def on_ready():
      print('Bot pronto')
      # tas.start_tasks()
@@ -81,8 +90,9 @@ async def on_ready():
 
 @client.event
 async def on_disconnect():
-     presence_setter.stop()
-     tas.stop_tasks()
+    presence_setter.stop()
+    client.chat_thread.stop()
+
 
 @client.event
 async def on_raw_reaction_add(struct):
@@ -179,6 +189,10 @@ async def on_command_error(ctx, error):
 
         await ctx.send(ctx.author.mention, embed=embed)
 
+    elif isinstance(error, commands.MissingRequiredArgument):
+        command = client.get_command("help")
+        await ctx.invoke(command, ctx.command.name)
+
     else:
         descr = f"```{type(error).__name__}: {error}```"
         embed = discord.Embed(title="Houve um erro ao executar esse comando!",
@@ -253,6 +267,11 @@ async def mute_user(ctx, user):
 
     await user.add_roles(role)
     return role
+
+@client.command()
+@commands.has_guild_permissions(manage_channels=True)
+async def remove_roles(ctx, user: discord.Member, role: discord.Role):
+    await user.remove_roles(role)
 
 @client.command()
 @commands.has_permissions(ban_members = True)

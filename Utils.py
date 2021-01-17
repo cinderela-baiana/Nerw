@@ -21,7 +21,6 @@ class DatabaseWrap:
         cl = []
 
         for field in fields:
-            print(field)
             cl.append(f"{field.name}\t{field.type}")
         joined = ",\n".join(cl)
         sql = f"""
