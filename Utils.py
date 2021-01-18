@@ -44,6 +44,17 @@ class DatabaseWrap:
 
         return fetched
 
+    def post_item(self, table: str, filled_items, values):
+        filj = ",".join(filled_items)
+        interr = []
+
+        i = 0
+        while i <= len(values):
+            interr.append("?")
+            i += 1
+        del i
+
+
 def is_blacklisted():
     connection = DatabaseWrap.from_filepath("main.db")
 

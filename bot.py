@@ -15,7 +15,7 @@ import sqlite3
 import chatterbot
 
 from chatterbot.trainers import ChatterBotCorpusTrainer
-from dataclasses import SingleGuildData, write_reaction_messages_to_file, write_blacklist
+from dataclass import SingleGuildData, write_reaction_messages_to_file, write_blacklist
 from typing import Optional
 from discord.ext import commands, tasks
 from itertools import cycle
@@ -34,7 +34,6 @@ intents = discord.Intents.all()
 # evita do bot mencionar everyone e cargos
 allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)
 
-
 async def quit_bot(client, *, system_exit=False):
     """
     Fecha o bot.
@@ -42,7 +41,6 @@ async def quit_bot(client, *, system_exit=False):
     await client.close()
     if system_exit:
         raise SystemExit
-
 
 with open("config/activities.json") as fp:
     activities = cycle(json.load(fp))
@@ -54,7 +52,6 @@ client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitiv
 
 client.remove_command("help")
 
-
 def load_all_extensions(*, folder=None):
     """Carrega todas as extensões."""
 
@@ -64,9 +61,7 @@ def load_all_extensions(*, folder=None):
     for file in filt:
         client.load_extension(f"{folder}.{file.replace('.py', '')}")
 
-
 load_all_extensions()
-
 
 @tasks.loop(minutes=5)
 async def presence_setter():
@@ -75,9 +70,7 @@ async def presence_setter():
 
     await client.change_presence(activity=activity, status=payload.get("status", "online"))
 
-
 tas = Tasks(client)
-
 
 @client.event
 async def on_connect():
@@ -98,16 +91,13 @@ async def on_disconnect():
     presence_setter.stop()
     client.chat_thread.stop()
 
-
 @client.check
 async def blacklist(ctx):
     connection = DatabaseWrap.from_filepath("main.db")
     item = connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
-    print(item)
     if item is None:
         return True
     raise UserBlacklisted
-
 
 @client.event
 async def on_raw_reaction_add(struct):
@@ -207,6 +197,7 @@ async def on_command_error(ctx, error):
 
     elif isinstance(error, commands.MissingRequiredArgument):
         command = client.get_command("help")
+
         await ctx.invoke(command, ctx.command.name)
 
     elif isinstance(error, UserBlacklisted):
@@ -227,8 +218,7 @@ async def on_command_error(ctx, error):
 
 @client.command()
 async def tempo(ctx, *, cidade: str):
-    """Verifica o tempo atual na sua cidade
-       """
+    """Verifica o tempo atual na cidade informada."""
     urlcompleta = tempourl + "appid=" + apitempo + "&q=" + cidade + "&lang=pt_br"
     async with aiohttp.ClientSession() as session:
         async with session.get(urlcompleta) as request:
@@ -293,11 +283,6 @@ async def mute_user(ctx, user):
     return role
 
 @client.command()
-@commands.has_guild_permissions(manage_channels=True)
-async def remove_roles(ctx, user: discord.Member, role: discord.Role):
-    await user.remove_roles(role)
-
-@client.command()
 @commands.has_permissions(ban_members=True)
 @commands.bot_has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, *, reason=None):
@@ -358,15 +343,25 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
 
     Você precisa da permissão `Gerenciar Canais`.
     """
-    inst = SingleGuildData.get_instance()
-    inst.channel = ctx.channel if channel is None else channel
+    if channel is None:
+        channel = ctx.channel
+
+    db = DatabaseWrap.from_filepath("main.db")
+    fields = (
+        Field(name="guild", type="TEXT NOT NULL"),
+        Field(name="channel", type="TEXT NOT NULL")
+    )
+
+    db.create_table_if_absent("default_channels", fields=fields)
+    db.cursor.execute("INSERT INTO default_channels(guild, channel) VALUES (?,?)", (ctx.guild.id, ctx.channel.id))
+    db.database.commit()
     await ctx.channel.send(embed=discord.Embed(
-        description='Canal {} adicionado como canal principal de respostas!'.format(inst.channel.mention),
+        description='Canal {} adicionado como canal principal de respostas!'.format(channel.mention),
         color=0xff0000))
 
 
 @client.command()
-@commands.has_permissions(manage_channels=True)
+@commands.has_guild_permissions(manage_channels=True)
 async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
                             msg: str,
                             emoji: discord.Emoji,
@@ -389,14 +384,28 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
 @client.command()
 @commands.is_owner()
 async def lex(ctx, *, extension: str):
-    client.load_extension(f"ext.{extension}")
+    try:
+        client.load_extension(f"ext.{extension}")
+    except commands.ExtensionNotFound as ex:
+        await ctx.reply(f"Não existe uma extensão chamada `{ex.name}`")
+        return
+    except commands.ExtensionAlreadyLoaded as ex:
+        await ctx.reply(f"A extensão `{ex.name}` já está carregada.")
+        return
+    except commands.NoEntryPointError as ex:
+        await ctx.reply(f"A extensão `{ex.name}` não possui a função `setup(...)`")
+        return
     await ctx.reply("Extensão carregada :+1:")
 
 
 @client.command()
 @commands.is_owner()
 async def unlex(ctx, *, extension: str):
-    client.unload_extension(f"ext.{extension}")
+    try:
+        client.unload_extension(f"ext.{extension}")
+    except commands.ExtensionNotLoaded as ex:
+        await ctx.reply(f"A extensão `{ex.name}` não foi carregada ou não existe.")
+        return
     await ctx.reply("Extensão descarregada :+1:")
 
 
