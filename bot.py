@@ -3,28 +3,24 @@ import yaml
 import asyncio
 import logging
 import json
-import requests
-from geopy.geocoders import Nominatim
 import aiohttp
-from discord.ext import commands, tasks, menus
-import traceback
 import emoji
 import datetime
-import random
 import os
-import sqlite3
-import chatterbot
-from datetime import timezone
-from chatterbot.trainers import ChatterBotCorpusTrainer
+import traceback
+import sys
+
+from geopy.geocoders import Nominatim
 from dataclass import SingleGuildData, write_reaction_messages_to_file, write_blacklist
 from typing import Optional
-from discord.ext import commands, tasks
+from discord.ext import commands, tasks, menus
 from itertools import cycle
 from Tasks import Tasks
 from Utils import DatabaseWrap, Field
 from chatter_thread import ChatterThread
 from chatterbot import ChatBot
 from errors import UserBlacklisted
+from discord.ext import commands, tasks, menus
 
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
 tempourl = "https://api.openweathermap.org/data/2.5/onecall?"
@@ -32,7 +28,10 @@ geolocator = Nominatim(user_agent='joaovictor.lg020@gmail.com')
 
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.all()
-blacklisteds = []
+
+intents.typing = False
+intents.integrations = False
+
 # evita do bot mencionar everyone e cargos
 allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)
 
@@ -84,9 +83,7 @@ async def on_connect():
 @client.event
 async def on_ready():
     logging.info('Bot pronto como ' + str(client.user))
-    # tas.start_tasks()
     presence_setter.start()
-
 
 @client.event
 async def on_disconnect():
@@ -96,13 +93,13 @@ async def on_disconnect():
 @client.check
 async def blacklist(ctx):
     fields = (
-  Field(name="user_id", type="TEXT NOT NULL"),
-  Field(name="reason", type="TEXT")
-)
+        Field(name="user_id", type="TEXT NOT NULL"),
+        Field(name="reason", type="TEXT")
+    )
     wrap = DatabaseWrap.from_filepath("main.db")
     wrap.create_table_if_absent("blacklisteds", fields)
-    connection = DatabaseWrap.from_filepath("main.db")
-    item = connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
+    item = wrap.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
+
     if item is None:
         return True
     raise UserBlacklisted
@@ -158,7 +155,6 @@ async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
         member = guild.get_member(struct.user_id)
         role = guild.get_role(int(role_id))
 
-        print(int(message_id) == struct.message_id)
         if int(message_id) == struct.message_id:
             await member.add_roles(role, reason="Reaction Roles.", atomic=True)
 
@@ -169,6 +165,8 @@ async def on_message(message):
 
 @client.event
 async def on_command_error(ctx, error):
+    traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(
             f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after,0))}s para você "
@@ -184,7 +182,6 @@ async def on_command_error(ctx, error):
 
     elif isinstance(error, commands.CommandNotFound):
         pass
-    
 
     elif isinstance(error, (discord.Forbidden, commands.BotMissingPermissions)):
         embed = discord.Embed(title="Houve um erro ao executar o comando!",
@@ -242,6 +239,7 @@ class Tempo(menus.Menu):
                 dt1 = datetime.datetime(dt.year, dt.month, dt.day, 1)
                 dt1 = dt1 + datetime.timedelta(days= page)
                 dt1 = int(dt1.timestamp())
+
                 dt2 = datetime.datetime(dt.year, dt.month, dt.day, 23)
                 dt2 = dt2 + datetime.timedelta(days= page)
                 dt2 = int(dt2.timestamp())
@@ -259,7 +257,8 @@ class Tempo(menus.Menu):
                 try:
                     current_temperature = current_temperature.get('day')
                     print(current_temperature)
-                except: pass
+                except:
+                    pass
                 current_temperature_celsiuis = str(round(current_temperature - 273.15))
                 current_humidity = period['humidity']
                 z = period["weather"]
@@ -322,6 +321,7 @@ async def tempo(ctx, *, cidade: str):
         w = Tempo(ctx, request, cidade)
         await w.start(ctx)
     except:
+        logging.error("Houve um erro ao tentar encontrar a localidade " + cidade, exc_info=True)
         await ctx.send("Local não encontrado")
 
 @client.command()
@@ -358,12 +358,11 @@ async def mute_user(ctx, user):
 
 @client.command()
 @commands.has_permissions(manage_messages=True)
-async def mover_mensagem(ctx, id_mensagem, canal: discord.TextChannel,*, motivo = None):
-    if motivo == None:
+async def mover_mensagem(ctx, message: discord.Message, canal: discord.TextChannel, *, motivo = None):
+    if motivo is None:
         motivo = 'Não especificado'
+
     hook = await canal.create_webhook(name="Gamera Bot")
-    message = await ctx.fetch_message(id_mensagem)
-    print(message.attachments)
     files = None
     if message.attachments:
         files = [await att.to_file() for att in message.attachments]
@@ -372,9 +371,11 @@ async def mover_mensagem(ctx, id_mensagem, canal: discord.TextChannel,*, motivo 
                                                        f'Motivo: {motivo}'), delete_after= 20)
     await hook.send(content=message.content, files= files, username=message.author.name,
                     avatar_url=message.author.avatar_url)
+
     await message.delete()
     await ctx.message.delete()
     await hook.delete()
+
 @client.command()
 @commands.has_permissions(ban_members=True)
 @commands.bot_has_permissions(ban_members=True)
@@ -382,6 +383,7 @@ async def ban(ctx, member: discord.Member, *, reason=None):
     if member == ctx.message.author:
         await ctx.channel.send("Você não pode se banir!")
         return
+
     emoji = client.get_emoji(793335773892968502)
     if emoji is None:
         emoji = "🔨"
@@ -503,9 +505,9 @@ async def unlex(ctx, *, extension: str):
 async def blacklist(ctx, user: discord.Member, *, reason: str = None):
     """Deixa uma pessoa na lista negra"""
     fields = (
-  Field(name="user_id", type="TEXT NOT NULL"),
-  Field(name="reason", type="TEXT")
-)
+          Field(name="user_id", type="TEXT NOT NULL"),
+          Field(name="reason", type="TEXT")
+    )
     wrap = DatabaseWrap.from_filepath("main.db")
     wrap.create_table_if_absent("blacklisteds", fields)
     await ctx.reply(f"O usuário {user} foi banido de usar o bot.")

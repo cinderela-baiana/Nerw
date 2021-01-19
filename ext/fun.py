@@ -15,9 +15,8 @@ class Fun(commands.Cog):
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def chatbot(self, ctx, *, texto: str):
         async with ctx.channel.typing():
-            resposta = self.client.chatter_thread.generate_response(pergunta)
-
-            await ctx.channel.send(f"{ctx.author.mention} " + str(resposta))
+            resposta = self.client.chat_thread.generate_response(texto)
+            await ctx.channel.send(f"{ctx.author.mention} " + str(resposta.text))
             self.client.last_statements[ctx.author.id] = texto
 
     @commands.command(name="banrandom", aliases=["banc"])

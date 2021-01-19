@@ -70,8 +70,8 @@ class ChatterThread(StoppableThread):
     def generate_response(self, question: str):
         logger.debug("Gerando resposta para a pergunta '" + question + "'")
 
-        awns = self.chat.generate_response(question)
-        logging.debug("Resposta gerada: " + awns)
+        awns = self.chat.generate_response(Statement(text=question))
+        logging.debug("Resposta gerada: " + awns.text)
 
         return awns
 
