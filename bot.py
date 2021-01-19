@@ -4,8 +4,9 @@ import asyncio
 import logging
 import json
 import requests
+from geopy.geocoders import Nominatim
 import aiohttp
-import sys
+from discord.ext import commands, tasks, menus
 import traceback
 import emoji
 import datetime
@@ -13,7 +14,7 @@ import random
 import os
 import sqlite3
 import chatterbot
-
+from datetime import timezone
 from chatterbot.trainers import ChatterBotCorpusTrainer
 from dataclass import SingleGuildData, write_reaction_messages_to_file, write_blacklist
 from typing import Optional
@@ -26,13 +27,15 @@ from chatterbot import ChatBot
 from errors import UserBlacklisted
 
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
-tempourl = "http://api.openweathermap.org/data/2.5/weather?"
+tempourl = "https://api.openweathermap.org/data/2.5/onecall?"
+geolocator = Nominatim(user_agent='joaovictor.lg020@gmail.com')
 
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.all()
-
+blacklisteds = []
 # evita do bot mencionar everyone e cargos
 allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)
+
 
 async def quit_bot(client, *, system_exit=False):
     """
@@ -41,6 +44,7 @@ async def quit_bot(client, *, system_exit=False):
     await client.close()
     if system_exit:
         raise SystemExit
+
 
 with open("config/activities.json") as fp:
     activities = cycle(json.load(fp))
@@ -67,9 +71,7 @@ load_all_extensions()
 async def presence_setter():
     payload = next(activities)
     activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
-
     await client.change_presence(activity=activity, status=payload.get("status", "online"))
-
 tas = Tasks(client)
 
 @client.event
@@ -93,6 +95,12 @@ async def on_disconnect():
 
 @client.check
 async def blacklist(ctx):
+    fields = (
+  Field(name="user_id", type="TEXT NOT NULL"),
+  Field(name="reason", type="TEXT")
+)
+    wrap = DatabaseWrap.from_filepath("main.db")
+    wrap.create_table_if_absent("blacklisteds", fields)
     connection = DatabaseWrap.from_filepath("main.db")
     item = connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
     if item is None:
@@ -102,7 +110,7 @@ async def blacklist(ctx):
 @client.event
 async def on_raw_reaction_add(struct):
     if struct.guild_id is None:
-        return  # ignorar DMs
+       return # ignorar DMs
 
     wrap = DatabaseWrap.from_filepath("main.db")
 
@@ -130,11 +138,10 @@ async def on_raw_reaction_add(struct):
         if emoji == str(struct.emoji) and message_id == struct.message_id:
             await member.add_roles(role, reason="Reaction Roles.", atomic=True)
 
-
 @client.event
 async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
     if struct.guild_id is None:
-        return  # ignorar DMs
+        return # ignorar DMs
 
     wrap = DatabaseWrap.from_filepath("main.db")
     item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
@@ -155,7 +162,6 @@ async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
         if int(message_id) == struct.message_id:
             await member.add_roles(role, reason="Reaction Roles.", atomic=True)
 
-
 @client.event
 async def on_message(message):
     await client.process_commands(message)
@@ -165,7 +171,7 @@ async def on_message(message):
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(
-            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after, 0))}s para você "
+            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after,0))}s para você "
             "usar o comando novamente.", delete_after=5
         )
         await asyncio.sleep(5)
@@ -178,6 +184,7 @@ async def on_command_error(ctx, error):
 
     elif isinstance(error, commands.CommandNotFound):
         pass
+    
 
     elif isinstance(error, (discord.Forbidden, commands.BotMissingPermissions)):
         embed = discord.Embed(title="Houve um erro ao executar o comando!",
@@ -215,40 +222,107 @@ async def on_command_error(ctx, error):
 
         await ctx.send(ctx.author.mention, embed=embed)
 
+class Tempo(menus.Menu):
+    def __init__(self, ctx, request, cidade):
+        super().__init__()
+        self.cidade = cidade
+        self.page = 0
+        self.ctx = ctx
+        self.request = request
 
+    async def get_weather(self, page):
+        ctx = self.ctx
+        x = self.request
+
+        if x != 404:
+            async with ctx.channel.typing():
+                y = x["current"]
+                d = x['daily']
+                dt = datetime.datetime.utcnow()
+                dt1 = datetime.datetime(dt.year, dt.month, dt.day, 1)
+                dt1 = dt1 + datetime.timedelta(days= page)
+                dt1 = int(dt1.timestamp())
+                dt2 = datetime.datetime(dt.year, dt.month, dt.day, 23)
+                dt2 = dt2 + datetime.timedelta(days= page)
+                dt2 = int(dt2.timestamp())
+                for item in d:
+                    between = list(item.values())[1] in range(dt1, dt2)
+                    if between:
+                        print('oi')
+                        d = item
+                        pop = (item['pop'])
+
+                if page == 0: period = y
+                else: period = d
+
+                current_temperature = period['temp']
+                try:
+                    current_temperature = current_temperature.get('day')
+                    print(current_temperature)
+                except: pass
+                current_temperature_celsiuis = str(round(current_temperature - 273.15))
+                current_humidity = period['humidity']
+                z = period["weather"]
+                weather_description = z[0]['description']
+                a = x.get('alerts')
+                if a != None:
+                    alerts = a[0]['description']
+                else:
+                    alerts = 'Nenhum'
+                icon = z[0]['icon']
+                iconurl = f'http://openweathermap.org/img/wn/{icon}@2x.png'
+                dtnow=datetime.datetime.now() + datetime.timedelta(days= page)
+                embed = discord.Embed(title=f"Tempo em {self.cidade} {dtnow.day}/{dt.month}/{dt.year}",
+                                      color=ctx.guild.me.top_role.color,
+                                      timestamp=ctx.message.created_at, )
+                embed.add_field(name="Descrição", value=f"**{weather_description.capitalize()}**", inline=False)
+                embed.add_field(name="🌡️ Temperatura(C)", value=f"Média: **{current_temperature_celsiuis}°C**",
+                                inline=False)
+                embed.add_field(name="💦 Humildade(%)", value=f"**{current_humidity}%**", inline=False)
+                embed.add_field(name="☔ Chance de chuva(%)", value=f"**{pop * 100}%**", inline=False)
+                embed.add_field(name="⚠ Alertas:", value=f"**{alerts}**", inline=False)
+                embed.set_thumbnail(url=iconurl)
+                embed.set_footer(text=f"Requisitado por {ctx.author.name}")
+                return embed
+
+    async def send_initial_message(self, ctx, channel):
+        weather = await self.get_weather(page=self.page)
+        return await ctx.send(embed= weather)
+
+    @menus.button('⬅️')
+    async def on_left(self, payload):
+        if not self.page == 0:
+            self.page -= 1
+        weather = await self.get_weather(page=self.page)
+        await self.message.edit(embed=weather)
+
+    @menus.button('➡️')
+    async def on_right(self, payload):
+        if not self.page == 7:
+            self.page += 1
+        weather = await self.get_weather(page=self.page)
+        await self.message.edit(embed=weather)
+
+@commands.cooldown(1, 20.0, commands.BucketType.member)
 @client.command()
 async def tempo(ctx, *, cidade: str):
-    """Verifica o tempo atual na cidade informada."""
-    urlcompleta = tempourl + "appid=" + apitempo + "&q=" + cidade + "&lang=pt_br"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(urlcompleta) as request:
-            x = await request.json()
-            status_code = request.status
+    """Verifica o tempo atual na sua cidade
+       """
+    cidade = cidade.capitalize()
 
-    if status_code != 404:
-        async with ctx.channel.typing():
-            y = x["main"]
-            current_temperature = y["temp"]
-            current_temperature_celsiuis = str(round(current_temperature - 273.15))
-            current_pressure = y["pressure"]
-            current_humidity = y["humidity"]
-            z = x["weather"]
-            weather_description = z[0]["description"]
-
-            embed = discord.Embed(title=f"Tempo em {cidade}",
-                                  color=ctx.guild.me.top_role.color,
-                                  timestamp=ctx.message.created_at, )
-            embed.add_field(name="Descrição", value=f"**{weather_description}**", inline=False)
-            embed.add_field(name="Temperatura(C)", value=f"**{current_temperature_celsiuis}°C**", inline=False)
-            embed.add_field(name="Humildade(%)", value=f"**{current_humidity}%**", inline=False)
-            embed.add_field(name="Pressão atmosférica(hPa)", value=f"**{current_pressure}hPa**", inline=False)
-            embed.set_thumbnail(url="https://i.ibb.co/CMrsxdX/weather.png")
-            embed.set_footer(text=f"Requisitado por {ctx.author.name}")
-
-            await ctx.channel.send(embed=embed)
-    else:
-        await ctx.channel.send("Cidade não encontrada.")
-
+    if cidade.startswith('Cidade do'):
+        cidade = 'rolândia'
+    try:
+        locator = geolocator.geocode(cidade)
+        urlcompleta = tempourl + "lat=" + str(locator.latitude) + "&lon=" + str(
+        locator.longitude) + '&appid=' + apitempo + "&lang=pt_br"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(urlcompleta) as request:
+                request = await request.json()
+        w = Tempo(ctx, request, cidade)
+        await w.start(ctx)
+    except:
+        await ctx.send("Local não encontrado")
 
 @client.command()
 @commands.cooldown(1, 20, commands.BucketType.member)
@@ -283,6 +357,25 @@ async def mute_user(ctx, user):
     return role
 
 @client.command()
+@commands.has_permissions(manage_messages=True)
+async def mover_mensagem(ctx, id_mensagem, canal: discord.TextChannel,*, motivo = None):
+    if motivo == None:
+        motivo = 'Não especificado'
+    hook = await canal.create_webhook(name="Gamera Bot")
+    message = await ctx.fetch_message(id_mensagem)
+    print(message.attachments)
+    files = None
+    if message.attachments:
+        files = [await att.to_file() for att in message.attachments]
+    await canal.send(content = f'{message.author.mention}', embed= discord.Embed(title= f'Mensagem movida!',
+                                          description= f'Sua mensagem foi movida para cá.\n'
+                                                       f'Motivo: {motivo}'), delete_after= 20)
+    await hook.send(content=message.content, files= files, username=message.author.name,
+                    avatar_url=message.author.avatar_url)
+    await message.delete()
+    await ctx.message.delete()
+    await hook.delete()
+@client.command()
 @commands.has_permissions(ban_members=True)
 @commands.bot_has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, *, reason=None):
@@ -305,7 +398,6 @@ async def ban(ctx, member: discord.Member, *, reason=None):
 @commands.is_owner()
 async def exit(ctx):
     """Desliga o bot.
-
     Você precisa ser um do(s) dono(s) do bot para executar o comando.
     """
     msg = await ctx.send(f"{ctx.author.mention} Você tem certeza?")
@@ -319,7 +411,6 @@ async def exit(ctx):
         def check(reaction, user):
             nonlocal ctx, msg
             return reaction.emoji in (white_check_mark, sos) and user == ctx.author and reaction.message == msg
-
         reaction, user = await client.wait_for("reaction_add", check=check, timeout=20.0)
     except asyncio.TimeoutError:
         pass
@@ -328,11 +419,10 @@ async def exit(ctx):
             await ctx.send("Ok :cry:")
             await quit_bot(client, system_exit=True)
 
-
 @client.command()
 async def ping(ctx):
     """Verifica seu ping."""
-    await ctx.channel.send(
+    await ctx.reply(
         'Pong! latência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency * 1000, 1)))
 
 
@@ -340,7 +430,6 @@ async def ping(ctx):
 @commands.has_permissions(manage_channels=True)
 async def setchannel(ctx, channel: Optional[discord.TextChannel]):
     """Define o canal padrão para as respostas principais (logs).
-
     Você precisa da permissão `Gerenciar Canais`.
     """
     if channel is None:
@@ -413,6 +502,12 @@ async def unlex(ctx, *, extension: str):
 @commands.is_owner()
 async def blacklist(ctx, user: discord.Member, *, reason: str = None):
     """Deixa uma pessoa na lista negra"""
+    fields = (
+  Field(name="user_id", type="TEXT NOT NULL"),
+  Field(name="reason", type="TEXT")
+)
+    wrap = DatabaseWrap.from_filepath("main.db")
+    wrap.create_table_if_absent("blacklisteds", fields)
     await ctx.reply(f"O usuário {user} foi banido de usar o bot.")
     write_blacklist(user, reason)
 
