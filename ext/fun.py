@@ -41,7 +41,6 @@ class Fun(commands.Cog):
     @commands.command()
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def obama(self, ctx):
-        os.remove("opa.png")
         try:
             for att in ctx.message.attachments:
                 await att.save('opa.png')
@@ -54,8 +53,11 @@ class Fun(commands.Cog):
                 print(results)
             else:
                 await ctx.reply("Isto não é Obama.")
+            pass
         except:
             await ctx.reply("Com certeza isto não é Obama.")
+            pass
+        os.remove("opa.png")
 
     @commands.command(name="banrandom", aliases=["banc"])
     @commands.has_guild_permissions(ban_members=True)
