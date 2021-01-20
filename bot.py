@@ -239,7 +239,6 @@ class Tempo(menus.Menu):
                 dt1 = datetime.datetime(dt.year, dt.month, dt.day, 1)
                 dt1 = dt1 + datetime.timedelta(days= page)
                 dt1 = int(dt1.timestamp())
-
                 dt2 = datetime.datetime(dt.year, dt.month, dt.day, 23)
                 dt2 = dt2 + datetime.timedelta(days= page)
                 dt2 = int(dt2.timestamp())
@@ -330,8 +329,8 @@ async def selfmute(ctx, seconds: int):
     message = await ctx.send("Você quando usar esse comando, fique ciente de que será mutado."
                              "\n\nNão vá na DM de nenhum Ajudante/Moderador reclamar de que não sabia que iria ser.")
 
-    await message.add_reaction("👎")
     await message.add_reaction("👍")
+    await message.add_reaction("👎")
 
     def check(reaction, user):
         return reaction.message.id == message.id and user == ctx.author and reaction.emoji in ("👍", "👎")
@@ -341,11 +340,14 @@ async def selfmute(ctx, seconds: int):
     except asyncio.TimeoutError:
         return
     else:
-        role = await mute_user(ctx, ctx.author)
+        if reaction.emoji == "👍":
+            role = await mute_user(ctx, ctx.author)
 
-        await ctx.reply(":ok_hand:")
-        await asyncio.sleep(seconds)
-        await ctx.author.remove_roles(role)
+            await ctx.reply(":ok_hand:")
+            await asyncio.sleep(seconds)
+            await ctx.author.remove_roles(role)
+        else:
+            await ctx.reply("Comando cancelado.")
 
 async def mute_user(ctx, user):
     role = discord.utils.find(lambda item: item.name == "Muted", ctx.guild.roles)

@@ -2,10 +2,29 @@ from discord.ext import commands, tasks
 from chatterbot import ChatBot
 from chatterbot.trainers import ChatterBotCorpusTrainer
 from chatterbot.conversation import Statement
-
+import face_recognition
 import discord
 import asyncio
 import random
+import os
+
+obama = face_recognition.load_image_file("./obama_known/Obama.jpg")
+obama2 = face_recognition.load_image_file("./obama_known/Obama (2).jpg")
+obama3 = face_recognition.load_image_file("./obama_known/Obama (3).jpg")
+obama4 =  face_recognition.load_image_file("./obama_known/Obama (4).jpg")
+
+obama = face_recognition.face_encodings(obama)[0]
+obama2 = face_recognition.face_encodings(obama2)[0]
+obama3 = face_recognition.face_encodings(obama3)[0]
+obama4 = face_recognition.face_encodings(obama4)[0]
+
+known_obama = [
+    obama,
+    obama2,
+    obama3,
+    obama4
+]
+
 
 class Fun(commands.Cog):
     def __init__(self, client):
@@ -18,6 +37,25 @@ class Fun(commands.Cog):
             resposta = self.client.chat_thread.generate_response(texto)
             await ctx.channel.send(f"{ctx.author.mention} " + str(resposta.text))
             self.client.last_statements[ctx.author.id] = texto
+
+    @commands.command()
+    @commands.cooldown(1, 15, commands.BucketType.member)
+    async def obama(self, ctx):
+        os.remove("opa.png")
+        try:
+            for att in ctx.message.attachments:
+                await att.save('opa.png')
+            unknown = face_recognition.load_image_file("opa.png") 
+            unknown = face_recognition.face_encodings(unknown)[0]
+            results = face_recognition.compare_faces(known_obama, unknown)
+            if True in results:
+                await ctx.reply(content="Isto é Obama.")
+                print('oi')
+                print(results)
+            else:
+                await ctx.reply("Isto não é Obama.")
+        except:
+            await ctx.reply("Com certeza isto não é Obama.")
 
     @commands.command(name="banrandom", aliases=["banc"])
     @commands.has_guild_permissions(ban_members=True)
