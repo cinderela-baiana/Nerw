@@ -165,8 +165,6 @@ async def on_message(message):
 
 @client.event
 async def on_command_error(ctx, error):
-    traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
-
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(
             f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after,0))}s para você "
@@ -213,6 +211,7 @@ async def on_command_error(ctx, error):
         await ctx.reply("Saia, você entrou pra lista negra. Motivo: **{reason}**")
 
     else:
+        traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
         descr = f"```{type(error).__name__}: {error}```"
         embed = discord.Embed(title="Houve um erro ao executar esse comando!",
                               description=descr, color=discord.Color.dark_theme())

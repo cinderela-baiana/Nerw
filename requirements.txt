@@ -1,0 +1,8 @@
+discord.py>=1.5,<=1.6
+geopy
+ChatterBot
+chatterbot-corpus
+emoji
+PyYAML
+chess
+CairoSVG
