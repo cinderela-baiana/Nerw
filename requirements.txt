@@ -4,5 +4,5 @@ ChatterBot
 chatterbot-corpus
 emoji
 PyYAML
-chess
+chess==1.3.3
 CairoSVG
