@@ -8,11 +8,10 @@ import sqlite3
 Field = namedtuple("Field", ("name", "type"))
 
 class DatabaseWrap:
-    """Provê funções que 'enrolam' chamadas cruas ao banco de dados."""
-
     def __init__(self, database):
         self.cursor = database.cursor()
         self.database = database
+        self.closed = False
 
     @classmethod
     def from_filepath(cls, filename):
@@ -44,16 +43,33 @@ class DatabaseWrap:
 
         return fetched
 
-    def post_item(self, table: str, filled_items, values):
-        filj = ",".join(filled_items)
-        interr = []
+    def remove_item(self, table_name: str, condition: str):
+        sql = f"DELETE FROM {table_name} WHERE {condition}"
 
-        i = 0
-        while i <= len(values):
-            interr.append("?")
-            i += 1
-        del i
+        self.cursor.execute(sql)
+        self.database.commit()
+        self.close()
 
+    def close(self):
+        """
+        Fecha a conexão com o banco de dados.
+        Essa função não tem efeito se já fechado.
+        """
+        if not self.closed:
+            self.closed = True
+            self.database.close()
+
+    def reopen(self):
+        """
+        Reabre a conexão com o banco de dados
+        Não tem efeito se não estiver fechado.
+
+        Nota: Essa função retorna uma instância diferente da
+                usada para chamar-lá.
+        """
+        if self.closed:
+            ins = DatabaseWrap.from_filepath("main.db")
+            return ins
 
 def is_blacklisted():
     connection = DatabaseWrap.from_filepath("main.db")

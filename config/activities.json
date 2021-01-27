@@ -1,6 +1,10 @@
 [
 	{
-		"name": "$schema",
-		"type": 0
+		"name": "Mr. Robot",
+		"type": 3
+	},
+	{
+		"name": "Rocket League",
+		"type": 5
 	}
 ]

@@ -9,6 +9,8 @@ import datetime
 import os
 import traceback
 import sys
+import aiohttp
+import io
 
 from geopy.geocoders import Nominatim
 from dataclass import SingleGuildData, write_reaction_messages_to_file, write_blacklist
@@ -21,34 +23,33 @@ from chatter_thread import ChatterThread
 from chatterbot import ChatBot
 from errors import UserBlacklisted
 from discord.ext import commands, tasks, menus
+from PIL import Image, ImageDraw
 
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
 tempourl = "https://api.openweathermap.org/data/2.5/onecall?"
 geolocator = Nominatim(user_agent='joaovictor.lg020@gmail.com')
 
 logging.basicConfig(level=logging.INFO)
-intents = discord.Intents.all()
 
+intents = discord.Intents.all()
 intents.typing = False
 intents.integrations = False
 
 # evita do bot mencionar everyone e cargos
 allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)
 
-
-async def quit_bot(client, *, system_exit=False):
+async def quit_bot(client):
     """
     Fecha o bot.
     """
     await client.close()
-    if system_exit:
-        raise SystemExit
-
 
 with open("config/activities.json") as fp:
     activities = cycle(json.load(fp))
 with open('config/credentials.yaml') as t:
     credentials = yaml.load(t)
+
+discord.ActivityType
 
 client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
                       intents=intents, allowed_mentions=allowed_mentions)
@@ -74,15 +75,14 @@ async def presence_setter():
 tas = Tasks(client)
 
 @client.event
-async def on_connect():
-    client.chatbot = ChatBot("Iguaçu")
-    client.chat_thread = ChatterThread(client.chatbot)
-    client.chat_thread.start()
-
-
-@client.event
 async def on_ready():
     logging.info('Bot pronto como ' + str(client.user))
+    if not hasattr(client, "chat_thread"):
+        client.chat_thread = ChatterThread()
+        client.chat_thread.start()
+    
+    client.last_statements = {}
+
     presence_setter.start()
 
 @client.event
@@ -162,7 +162,6 @@ async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
 async def on_message(message):
     await client.process_commands(message)
 
-
 @client.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
@@ -209,6 +208,9 @@ async def on_command_error(ctx, error):
             reason = "Nenhum..."
 
         await ctx.reply("Saia, você entrou pra lista negra. Motivo: **{reason}**")
+
+    elif isinstance(error, commands.NotOwner):
+        await ctx.reply("Este comando está reservado apenas para pessoas especiais. :3")
 
     else:
         traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
@@ -319,8 +321,8 @@ async def tempo(ctx, *, cidade: str):
         w = Tempo(ctx, request, cidade)
         await w.start(ctx)
     except:
-        logging.error("Houve um erro ao tentar encontrar a localidade " + cidade, exc_info=True)
         await ctx.send("Local não encontrado")
+
 
 @client.command()
 @commands.cooldown(1, 20, commands.BucketType.member)
@@ -377,25 +379,6 @@ async def mover_mensagem(ctx, message: discord.Message, canal: discord.TextChann
     await ctx.message.delete()
     await hook.delete()
 
-@client.command()
-@commands.has_permissions(ban_members=True)
-@commands.bot_has_permissions(ban_members=True)
-async def ban(ctx, member: discord.Member, *, reason=None):
-    if member == ctx.message.author:
-        await ctx.channel.send("Você não pode se banir!")
-        return
-
-    emoji = client.get_emoji(793335773892968502)
-    if emoji is None:
-        emoji = "🔨"
-    embed = embed = discord.Embed(title=f"{emoji} {member} foi banido!",
-                                  description=f"**Motivo:** *{reason}*",
-                                  color=0x00ff9d)
-    embed.set_footer(text="Não façam como ele crianças, respeitem as regras.")
-
-    await member.ban(reason=reason)
-    await ctx.channel.send(embed=embed)
-    await ctx.message.delete()
 
 @client.command()
 @commands.is_owner()
@@ -420,7 +403,7 @@ async def exit(ctx):
     else:
         if reaction.emoji == white_check_mark:
             await ctx.send("Ok :cry:")
-            await quit_bot(client, system_exit=True)
+            await quit_bot(client)
 
 @client.command()
 async def ping(ctx):
@@ -476,6 +459,8 @@ async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
 @client.command()
 @commands.is_owner()
 async def lex(ctx, *, extension: str):
+    """Carrega uma extensão."""
+
     try:
         client.load_extension(f"ext.{extension}")
     except commands.ExtensionNotFound as ex:
@@ -499,20 +484,5 @@ async def unlex(ctx, *, extension: str):
         await ctx.reply(f"A extensão `{ex.name}` não foi carregada ou não existe.")
         return
     await ctx.reply("Extensão descarregada :+1:")
-
-
-@client.command()
-@commands.is_owner()
-async def blacklist(ctx, user: discord.Member, *, reason: str = None):
-    """Deixa uma pessoa na lista negra"""
-    fields = (
-          Field(name="user_id", type="TEXT NOT NULL"),
-          Field(name="reason", type="TEXT")
-    )
-    wrap = DatabaseWrap.from_filepath("main.db")
-    wrap.create_table_if_absent("blacklisteds", fields)
-    await ctx.reply(f"O usuário {user} foi banido de usar o bot.")
-    write_blacklist(user, reason)
-
 
 client.run(credentials.get("TOKEN"))

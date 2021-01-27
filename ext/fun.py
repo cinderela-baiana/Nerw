@@ -1,10 +1,12 @@
 from discord.ext import commands, tasks
 from typing import Optional
+from PIL import Image, ImageDraw
 
 import discord
 import asyncio
 import random
-import os
+import io
+
 
 class Fun(commands.Cog):
     def __init__(self, client):
@@ -14,8 +16,7 @@ class Fun(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_delete(self, message):
-        if not message.author.bot:
-            self.messages[message.channel.id] = message
+        self.messages[message.channel.id] = message
 
     @tasks.loop(minutes=2)
     async def messages_task(self):
@@ -24,7 +25,7 @@ class Fun(commands.Cog):
             key = keyview[len(keyview) - 1]
 
             del self.messages[key]
-        except IndexError:
+        except (IndexError, KeyError):
             pass
 
     @commands.command
@@ -46,6 +47,11 @@ class Fun(commands.Cog):
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def chatbot(self, ctx, *, texto: str):
         async with ctx.channel.typing():
+            if not hasattr(self.client, "chat_thread") or not self.client.chat_thread.available:
+                await ctx.reply("O comando `chatbot` não pôde ser executado por que"
+                                    "o chatter está indisponível ou não está ativado.")
+                return
+
             resposta = self.client.chat_thread.generate_response(texto)
             await ctx.channel.send(f"{ctx.author.mention} " + str(resposta.text))
             self.client.last_statements[ctx.author.id] = texto
@@ -86,6 +92,54 @@ class Fun(commands.Cog):
 
             await asyncio.sleep(5)
             await ctx.guild.unban(memb, reason="Tinha sido banido pelo ,banrandom")
+
+    def get_colors(self, image, colors=10, resize=150):
+        if isinstance(image, bytes):
+            image = io.BytesIO(image)
+        image = Image.open(image)
+
+        image = image.copy()
+        image.thumbnail((resize, resize))
+
+        palt = image.convert("P", palette=Image.ADAPTIVE, colors=colors)
+        palette = palt.getpalette()
+        color_counts = sorted(palt.getcolors(), reverse=True)
+        colors = []
+
+        for c in range(len(colors) + 1):
+            palette_index = color_counts[c][1]
+            dominant_color = palette[palette_index*3:palette_index*3+3]
+
+            colors.append(tuple(dominant_color))
+
+        return colors
+
+    def save_palette(self, colors, swatchsize=20, outfile="palette.png"):
+        num_colors = len(colors)
+        palette = Image.new('RGB', (swatchsize*num_colors, swatchsize))
+        draw = ImageDraw.Draw(palette)
+
+        posx = 0
+        for color in colors:
+            draw.rectangle([posx, 0, posx+swatchsize, swatchsize], fill=color) 
+            posx = posx + swatchsize
+
+        del draw
+        palette.save(outfile, "PNG")
+
+    @commands.command()
+    @commands.cooldown(1, 15, commands.BucketType.member)
+    async def domin(self, ctx, member: Optional[discord.Member]):
+        avatar = (member or ctx.author).avatar_url
+
+        colors = self.get_colors(await avatar.read())
+        self.save_palette(colors)
+
+        with open("palette.png", "rb") as fp:
+            file = discord.File(fp, "palette.png")
+
+        await ctx.reply(file=file)
+
 
     @commands.command(name="kickrandom", aliases=["kickr"])
     @commands.has_guild_permissions(kick_members=True)
@@ -132,7 +186,6 @@ class Misc(commands.Cog):
         self.client = client
 
     @commands.command()
-    # manda oi pra pessoa
     async def oibot(self, ctx):
         """Tá carente? Usa esse comando!"""
         await ctx.channel.send('Oieeeeee {}!'.format(ctx.message.author.name))
