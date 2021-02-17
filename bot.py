@@ -3,31 +3,22 @@ import yaml
 import asyncio
 import logging
 import json
-import aiohttp
 import emoji
-import datetime
 import os
 import traceback
 import sys
-import aiohttp
-import io
 
-from geopy.geocoders import Nominatim
 from dataclass import SingleGuildData, write_reaction_messages_to_file, write_blacklist
 from typing import Optional
 from discord.ext import commands, tasks, menus
 from itertools import cycle
 from Tasks import Tasks
-from Utils import DatabaseWrap, Field
+from Utils import Field, AsyncDatabaseWrap
 from chatter_thread import ChatterThread
 from chatterbot import ChatBot
 from errors import UserBlacklisted
 from discord.ext import commands, tasks, menus
 from PIL import Image, ImageDraw
-
-apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
-tempourl = "https://api.openweathermap.org/data/2.5/onecall?"
-geolocator = Nominatim(user_agent='joaovictor.lg020@gmail.com')
 
 logging.basicConfig(level=logging.INFO)
 
@@ -44,17 +35,17 @@ async def quit_bot(client):
     """
     await client.close()
 
+
 with open("config/activities.json") as fp:
     activities = cycle(json.load(fp))
 with open('config/credentials.yaml') as t:
     credentials = yaml.load(t)
 
-discord.ActivityType
-
 client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
                       intents=intents, allowed_mentions=allowed_mentions)
-
+snipes = {}
 client.remove_command("help")
+
 
 def load_all_extensions(*, folder=None):
     """Carrega todas as extensões."""
@@ -63,16 +54,30 @@ def load_all_extensions(*, folder=None):
         folder = "ext"
     filt = filter(lambda fold: fold.endswith(".py") and not fold.startswith("_"), os.listdir(folder))
     for file in filt:
-        client.load_extension(f"{folder}.{file.replace('.py', '')}")
+        r = f"{folder}.{file.replace('.py', '')}"
+        print(r)
+        client.load_extension(r)
+
 
 load_all_extensions()
+
 
 @tasks.loop(minutes=5)
 async def presence_setter():
     payload = next(activities)
     activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
     await client.change_presence(activity=activity, status=payload.get("status", "online"))
-tas = Tasks(client)
+
+
+@tasks.loop(minutes=2)
+async def remove_snipes():
+    # limpar os snipes.
+    for k, v in snipes.items():
+        try:
+            v.pop()
+        except IndexError:
+            pass
+
 
 @client.event
 async def on_ready():
@@ -80,15 +85,32 @@ async def on_ready():
     if not hasattr(client, "chat_thread"):
         client.chat_thread = ChatterThread()
         client.chat_thread.start()
-    
-    client.last_statements = {}
 
+    client.last_statements = {}
     presence_setter.start()
+    remove_snipes.start()
+
 
 @client.event
 async def on_disconnect():
     presence_setter.stop()
     client.chat_thread.stop()
+    remove_snipes.stop()
+
+@client.event
+async def on_resume():
+    client.chat_thread.start()
+    presence_setter.start()
+    remove_snipes.start()
+
+
+@client.event
+async def on_message_delete(message):
+    snipes_channel = snipes.get(message.channel.id)
+    if snipes_channel is None:
+        snipes[message.channel.id] = []
+    snipes[message.channel.id].append(message)
+
 
 @client.check
 async def blacklist(ctx):
@@ -96,77 +118,87 @@ async def blacklist(ctx):
         Field(name="user_id", type="TEXT NOT NULL"),
         Field(name="reason", type="TEXT")
     )
-    wrap = DatabaseWrap.from_filepath("main.db")
-    wrap.create_table_if_absent("blacklisteds", fields)
-    item = wrap.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
+    async with AsyncDatabaseWrap.from_filepath("main.db") as wrap:
+        wrap.create_table_if_absent("blacklisteds", fields)
+        item = wrap.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
 
     if item is None:
         return True
     raise UserBlacklisted
 
+
 @client.event
 async def on_raw_reaction_add(struct):
     if struct.guild_id is None:
-       return # ignorar DMs
+        return None  # ignorar DMs
 
-    wrap = DatabaseWrap.from_filepath("main.db")
+    async with AsyncDatabaseWrap.from_filepath("main.db") as wrap:
 
-    fields = (
-        Field(name="channel", type="TEXT"),
-        Field(name="message", type="TEXT"),
-        Field(name="emoji", type="TEXT"),
-        Field(name="role", type="TEXT")
-    )
+        fields = (
+            Field(name="channel", type="TEXT"),
+            Field(name="message", type="TEXT"),
+            Field(name="emoji", type="TEXT"),
+            Field(name="role", type="TEXT")
+        )
 
-    wrap.create_table_if_absent("reaction_roles", fields)
-    item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
+        await wrap.create_table_if_absent("reaction_roles", fields)
+        item = await wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
 
-    if item is not None:
-        try:
-            channel_id, message_id, emoji, role_id = item[0]
-        except IndexError:
-            return
+        if item is not None:
+            try:
+                channel_id, message_id, emoji, role_id = item[0]
+            except IndexError:
+                return
 
-        guild = client.get_guild(struct.guild_id)
-        channel = guild.get_channel(struct.channel_id)
-        member = guild.get_member(struct.user_id)
-        role = guild.get_role(role_id)
+            guild = client.get_guild(struct.guild_id)
+            channel = guild.get_channel(struct.channel_id)
+            member = guild.get_member(struct.user_id)
+            role = guild.get_role(role_id)
 
-        if emoji == str(struct.emoji) and message_id == struct.message_id:
-            await member.add_roles(role, reason="Reaction Roles.", atomic=True)
+            if emoji == str(struct.emoji) and message_id == struct.message_id:
+                await member.add_roles(role, reason="Reaction Roles.", atomic=True)
 
 @client.event
 async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
     if struct.guild_id is None:
-        return # ignorar DMs
+        return None  # ignorar DMs
 
-    wrap = DatabaseWrap.from_filepath("main.db")
-    item = wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
+    async with AsyncDatabaseWrap.from_filepath("main.db") as wrap:
 
-    if item is not None:
+        fields = (
+            Field(name="channel", type="TEXT"),
+            Field(name="message", type="TEXT"),
+            Field(name="emoji", type="TEXT"),
+            Field(name="role", type="TEXT")
+        )
 
-        try:
-            channel_id, message_id, emoji, role_id = item[0]
-        except IndexError:
-            return
+        await wrap.create_table_if_absent("reaction_roles", fields)
+        item = await wrap.get_item("reaction_roles", where=f"message = {struct.message_id}")
 
-        guild = client.get_guild(struct.guild_id)
-        channel = guild.get_channel(struct.channel_id)
-        member = guild.get_member(struct.user_id)
-        role = guild.get_role(int(role_id))
+        if item is not None:
+            try:
+                channel_id, message_id, emoji, role_id = item[0]
+            except IndexError:
+                return
 
-        if int(message_id) == struct.message_id:
-            await member.add_roles(role, reason="Reaction Roles.", atomic=True)
+            guild = client.get_guild(struct.guild_id)
+            channel = guild.get_channel(struct.channel_id)
+            member = guild.get_member(struct.user_id)
+            role = guild.get_role(role_id)
+
+            if emoji == str(struct.emoji) and message_id == struct.message_id:
+                await member.remove_roles(role, reason="Reaction Roles.", atomic=True)
 
 @client.event
 async def on_message(message):
     await client.process_commands(message)
 
+
 @client.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(
-            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after,0))}s para você "
+            f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after, 0))}s para você "
             "usar o comando novamente.", delete_after=5
         )
         await asyncio.sleep(5)
@@ -201,13 +233,18 @@ async def on_command_error(ctx, error):
 
         await ctx.invoke(command, ctx.command.name)
 
-    elif isinstance(error, UserBlacklisted):
-        connection = DatabaseWrap.from_filepath("main.db")
-        reason = connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", "reason")
-        if reason is None:
-            reason = "Nenhum..."
+    elif isinstance(error, commands.DisabledCommand):
+        await ctx.reply("O comando está desabilitado.")
 
-        await ctx.reply("Saia, você entrou pra lista negra. Motivo: **{reason}**")
+    elif isinstance(error, UserBlacklisted):
+        async with AsyncDatabaseWrap.from_filepath("main.db") as connection:
+            reason = await connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", "reason")
+            try:
+                reason = reason[0]
+            except IndexError:  # não tem um motivo
+                reason = "Nenhum..."
+
+        await ctx.reply(f"Saia, você entrou pra lista negra. Motivo: **{reason}**")
 
     elif isinstance(error, commands.NotOwner):
         await ctx.reply("Este comando está reservado apenas para pessoas especiais. :3")
@@ -219,109 +256,6 @@ async def on_command_error(ctx, error):
                               description=descr, color=discord.Color.dark_theme())
 
         await ctx.send(ctx.author.mention, embed=embed)
-
-class Tempo(menus.Menu):
-    def __init__(self, ctx, request, cidade):
-        super().__init__()
-        self.cidade = cidade
-        self.page = 0
-        self.ctx = ctx
-        self.request = request
-
-    async def get_weather(self, page):
-        ctx = self.ctx
-        x = self.request
-
-        if x != 404:
-            async with ctx.channel.typing():
-                y = x["current"]
-                d = x['daily']
-                dt = datetime.datetime.utcnow()
-                dt1 = datetime.datetime(dt.year, dt.month, dt.day, 1)
-                dt1 = dt1 + datetime.timedelta(days= page)
-                dt1 = int(dt1.timestamp())
-                dt2 = datetime.datetime(dt.year, dt.month, dt.day, 23)
-                dt2 = dt2 + datetime.timedelta(days= page)
-                dt2 = int(dt2.timestamp())
-                for item in d:
-                    between = list(item.values())[1] in range(dt1, dt2)
-                    if between:
-                        print('oi')
-                        d = item
-                        pop = (item['pop'])
-
-                if page == 0: period = y
-                else: period = d
-
-                current_temperature = period['temp']
-                try:
-                    current_temperature = current_temperature.get('day')
-                    print(current_temperature)
-                except:
-                    pass
-                current_temperature_celsiuis = str(round(current_temperature - 273.15))
-                current_humidity = period['humidity']
-                z = period["weather"]
-                weather_description = z[0]['description']
-                a = x.get('alerts')
-                if a != None:
-                    alerts = a[0]['description']
-                else:
-                    alerts = 'Nenhum'
-                icon = z[0]['icon']
-                iconurl = f'http://openweathermap.org/img/wn/{icon}@2x.png'
-                dtnow=datetime.datetime.now() + datetime.timedelta(days= page)
-                embed = discord.Embed(title=f"Tempo em {self.cidade} {dtnow.day}/{dt.month}/{dt.year}",
-                                      color=ctx.guild.me.top_role.color,
-                                      timestamp=ctx.message.created_at, )
-                embed.add_field(name="Descrição", value=f"**{weather_description.capitalize()}**", inline=False)
-                embed.add_field(name="🌡️ Temperatura(C)", value=f"Média: **{current_temperature_celsiuis}°C**",
-                                inline=False)
-                embed.add_field(name="💦 Humildade(%)", value=f"**{current_humidity}%**", inline=False)
-                embed.add_field(name="☔ Chance de chuva(%)", value=f"**{pop * 100}%**", inline=False)
-                embed.add_field(name="⚠ Alertas:", value=f"**{alerts}**", inline=False)
-                embed.set_thumbnail(url=iconurl)
-                embed.set_footer(text=f"Requisitado por {ctx.author.name}")
-                return embed
-
-    async def send_initial_message(self, ctx, channel):
-        weather = await self.get_weather(page=self.page)
-        return await ctx.send(embed= weather)
-
-    @menus.button('⬅️')
-    async def on_left(self, payload):
-        if not self.page == 0:
-            self.page -= 1
-        weather = await self.get_weather(page=self.page)
-        await self.message.edit(embed=weather)
-
-    @menus.button('➡️')
-    async def on_right(self, payload):
-        if not self.page == 7:
-            self.page += 1
-        weather = await self.get_weather(page=self.page)
-        await self.message.edit(embed=weather)
-
-@commands.cooldown(1, 20.0, commands.BucketType.member)
-@client.command()
-async def tempo(ctx, *, cidade: str):
-    """Verifica o tempo atual na sua cidade
-       """
-    cidade = cidade.capitalize()
-
-    if cidade.startswith('Cidade do'):
-        cidade = 'rolândia'
-    try:
-        locator = geolocator.geocode(cidade)
-        urlcompleta = tempourl + "lat=" + str(locator.latitude) + "&lon=" + str(
-        locator.longitude) + '&appid=' + apitempo + "&lang=pt_br"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(urlcompleta) as request:
-                request = await request.json()
-        w = Tempo(ctx, request, cidade)
-        await w.start(ctx)
-    except:
-        await ctx.send("Local não encontrado")
 
 
 @client.command()
@@ -350,6 +284,7 @@ async def selfmute(ctx, seconds: int):
         else:
             await ctx.reply("Comando cancelado.")
 
+
 async def mute_user(ctx, user):
     role = discord.utils.find(lambda item: item.name == "Muted", ctx.guild.roles)
 
@@ -359,9 +294,23 @@ async def mute_user(ctx, user):
     await user.add_roles(role)
     return role
 
+
 @client.command()
+async def snipe(ctx):
+    snipe_arr = snipes.get(ctx.channel.id)
+    if snipe_arr is None:
+        return await ctx.send("Não existe nenhum snipe.")
+    snipe = snipe_arr[len(snipe_arr) - 1]
+
+    embed = discord.Embed(description=snipe.content, color=snipe.author.color)
+    embed.set_author(name=snipe.author, icon_url=snipe.author.avatar_url)
+
+    await ctx.reply(embed=embed)
+
+
+@client.command(aliases=["mov"])
 @commands.has_permissions(manage_messages=True)
-async def mover_mensagem(ctx, message: discord.Message, canal: discord.TextChannel, *, motivo = None):
+async def mover_mensagem(ctx, message: discord.Message, canal: discord.TextChannel, *, motivo=None):
     if motivo is None:
         motivo = 'Não especificado'
 
@@ -369,10 +318,31 @@ async def mover_mensagem(ctx, message: discord.Message, canal: discord.TextChann
     files = None
     if message.attachments:
         files = [await att.to_file() for att in message.attachments]
-    await canal.send(content = f'{message.author.mention}', embed= discord.Embed(title= f'Mensagem movida!',
-                                          description= f'Sua mensagem foi movida para cá.\n'
-                                                       f'Motivo: {motivo}'), delete_after= 20)
-    await hook.send(content=message.content, files= files, username=message.author.name,
+    await canal.send(content=f'{message.author.mention}', embed=discord.Embed(title=f'Mensagem movida!',
+                                                description=f'Sua mensagem foi movida para cá.\n'
+                                                f'Motivo: {motivo}'),
+                                                delete_after=20)
+    content = message.content
+    if message.reference is not None and \
+            not isinstance(message.reference, discord.DeletedReferencedMessage):
+        # respondeu a alguém usando o novo sistema e
+        # a mensagem referenciada não foi apagada
+
+        rmessage = await ctx.channel.fetch_message(message.reference.message_id)
+
+        files = []
+        for attch in message.attachments:
+            files.append(await attch.to_file())
+
+        wmessage = await hook.send(username=rmessage.author.display_name,
+                        avatar_url=rmessage.author.avatar_url,
+                        content=rmessage.content,
+                        files=files,
+                        wait=True)
+
+        content = f"> {wmessage.content}\n{rmessage.author.mention} {message.content}"
+
+    await hook.send(content=content, files=files, username=message.author.name,
                     avatar_url=message.author.avatar_url)
 
     await message.delete()
@@ -397,6 +367,7 @@ async def exit(ctx):
         def check(reaction, user):
             nonlocal ctx, msg
             return reaction.emoji in (white_check_mark, sos) and user == ctx.author and reaction.message == msg
+
         reaction, user = await client.wait_for("reaction_add", check=check, timeout=20.0)
     except asyncio.TimeoutError:
         pass
@@ -404,6 +375,7 @@ async def exit(ctx):
         if reaction.emoji == white_check_mark:
             await ctx.send("Ok :cry:")
             await quit_bot(client)
+
 
 @client.command()
 async def ping(ctx):
@@ -421,19 +393,18 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
     if channel is None:
         channel = ctx.channel
 
-    db = DatabaseWrap.from_filepath("main.db")
-    fields = (
-        Field(name="guild", type="TEXT NOT NULL"),
-        Field(name="channel", type="TEXT NOT NULL")
-    )
+    async with AsyncDatabaseWrap.from_filepath("main.db") as db:
+        fields = (
+            Field(name="guild", type="TEXT NOT NULL"),
+            Field(name="channel", type="TEXT NOT NULL")
+        )
 
-    db.create_table_if_absent("default_channels", fields=fields)
-    db.cursor.execute("INSERT INTO default_channels(guild, channel) VALUES (?,?)", (ctx.guild.id, ctx.channel.id))
-    db.database.commit()
-    await ctx.channel.send(embed=discord.Embed(
-        description='Canal {} adicionado como canal principal de respostas!'.format(channel.mention),
-        color=0xff0000))
-
+        await db.create_table_if_absent("default_channels", fields=fields)
+        db._cursor.execute("INSERT INTO default_channels(guild, channel) VALUES (?,?)", (ctx.guild.id, ctx.channel.id))
+        db._connection.commit()
+        await ctx.channel.send(embed=discord.Embed(
+            description='Canal {} adicionado como canal principal de respostas!'.format(channel.mention),
+            color=0xff0000))
 
 @client.command()
 @commands.has_guild_permissions(manage_channels=True)
@@ -484,5 +455,6 @@ async def unlex(ctx, *, extension: str):
         await ctx.reply(f"A extensão `{ex.name}` não foi carregada ou não existe.")
         return
     await ctx.reply("Extensão descarregada :+1:")
+
 
 client.run(credentials.get("TOKEN"))

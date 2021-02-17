@@ -1,45 +1,42 @@
 import threading
 import logging
-from concurrent.futures import wait
+import queue
 
 from chatterbot import ChatBot
 from chatterbot.trainers import ChatterBotCorpusTrainer
 from chatterbot.conversation import Statement
+from collections import namedtuple
 
 logger = logging.getLogger(__name__)
 
-class StoppableThread(threading.Thread):
-    """Thread com o método stop().
+class Question(namedtuple("Question", ("content"))):
+    def __str__(self):
+        return self.content
 
-    Copiado da resposta do StackOverflow https://stackoverflow.com/a/325528/
-    """
+    def __len__(self):
+        return len(str(self))
 
-    def __init__(self,  *args, **kwargs):
-        super(StoppableThread, self).__init__(*args, **kwargs)
-        self._stop_event = threading.Event()
+    def __contains__(self, item):
+        return self.content in item
 
-    def stop(self):
-        self._stop_event.set()
-
-    @property
-    def stopped(self):
-        return self._stop_event.is_set()
-
-
-class ChatterThread(StoppableThread):
+class ChatterThread(threading.Thread):
     """
     Thread que cuida da parte do Chatter.
-
     Ver também: comando `chatbot`.
     """
-    def __init__(self):
-        super().__init__()
-
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
         self.daemon = True
-        self._chatbot = ChatBot("Chatter")
         self.name = "Chatter"
         self.trained = False
+
+        self._response = None
+        self._chatbot = None
         self._usable = False
+        self._count = 0
+        self._stop_event = threading.Event()
+        self._queue = queue.Queue(10)
 
     @property
     def chat(self):
@@ -72,12 +69,11 @@ class ChatterThread(StoppableThread):
         se já estiver treinado.
         """
 
-
-        logger.info("Começando o treinamento do ChatBot.")
-
         trainer = ChatterBotCorpusTrainer(self._chatbot, show_training_progress=False)
         try:
             if not self.trained:
+                logger.info("Começando o treinamento do ChatBot.")
+
                 trainer.train("chatterbot.corpus.portuguese")
                 self.trained = True
         except Exception:
@@ -89,26 +85,36 @@ class ChatterThread(StoppableThread):
             logger.info("ChatBot pronto!")
 
     def generate_response(self, question: str):
-        """
-        Gera uma resposta para a pergunta `question`.
-        """
-        
+        self._queue.put(Question(content=question), block=True, timeout=5.0)
+        return self._response
 
-        logger.debug("Gerando resposta para a pergunta '" + question + "'")
+    def _generate_response(self, question: Question):
+        logger.debug("Gerando resposta para a pergunta '" + str(question) + "'")
 
-        awns = self.chat.generate_response(Statement(text=question))
+        awns = self.chat.generate_response(Statement(text=str(question)))
         logging.debug("Resposta gerada: " + awns.text)
 
-        return awns
+        self._response = awns
+
+    def _keep_alive(self):
+        try:
+            question = self._queue.get(block=True)
+        except (queue.Full):
+            return
+
+        return self._generate_response(question.content)
 
     def run(self):
         super().run()
+        self._chatbot = ChatBot("Chatter")
+
         if not self.trained:
             self.train()
 
-    def stop(self):
-        super().stop()
+        self._keep_alive()
 
+    def stop(self):
         self.trained = False
         self._chatbot = None
         self._usable = False
+        self._stop_event.set()

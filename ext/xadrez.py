@@ -10,6 +10,11 @@ from cairosvg import svg2png
 import chess.svg
 import chess.engine
 from discord.ext import menus
+import os
+import warnings
+import uuid
+
+from Utils import DatabaseWrap, Field
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,24 +22,70 @@ brd = {}
 alias = {}
 channels = {}
 
+# importante: mudar isso pode quebrar o sistema de rankings do xadrez
+CHESS_TABLE_NAME = "chess_matches"
+
 class Chess(commands.Cog):
 
     def __init__(self, client):
         logging.info("Carregando engine do xadrez")
         self.client = client
-        self.engine = chess.engine.SimpleEngine.popen_uci("stockfish.exe")
+        file = "config/stockfish.exe"
+        if not os.path.exists(file):
+            file = "stockfish.exe"
+            warnings.warn("O stockfish.exe deve estar na pasta config.", DeprecationWarning,
+                          stacklevel=2)
+        self.engine = chess.engine.SimpleEngine.popen_uci(file)
         logging.info("engine do xadrez carregada!")
 
+    def _create_table(self):
+        """
+        Criação da tabela de SQL (para os rankings de xadrez.)
+        """
+        with DatabaseWrap.from_filepath("main.db") as wrap:
+            wrap.create_table_if_absent("chess_matches", [
+                Field(name="match", type="TEXT NOT NULL"),
+                Field(name="winner", type="TEXT")
+            ])
+
+    def _post_winner(self, winner):
+        if isinstance(winner, discord.Member):
+            winner = winner.id
+
+        # uuid4() gera um UUID pseudoaleatório.
+        match_id = str(uuid.uuid4())
+        with DatabaseWrap.from_filepath("main.db") as wrap:
+            wrap.database.execute("INSERT INTO chess_matches(match, winner) VALUES(?,?)", (match_id, winner))
+
+    @commands.command(aliases=["xadran"])
+    @commands.is_owner() # esse comando ainda não está pronto.
+    async def xadrez_rank(self, ctx):
+        with DatabaseWrap.from_filepath("main.db") as wrap:
+            wins = wrap.get_item("chess_matches", item_name="winner")
+        winn = set()
+
+        if isinstance(wins, tuple):
+            for win_id in wins:
+                if win_id is None:
+                    continue
+                count = wins.count(win_id)
+                winn.add((win_id, count))
+        descr = []
+
+        for winner_id, win_count in winn:
+            descr.append(f"{winner_id} - {win_count}")
+
+        await ctx.reply("\n".join(descr))
 
     @commands.command(aliases=["xadin"])
-    @commands.bot_has_permissions(manage_channels=True)
+    @commands.bot_has_guild_permissions(manage_channels=True)
     async def xadrez_iniciar(self, ctx, userplayer: Union[discord.Member, str]):
         """
         Cria uma partida de xadrez.
         O oponente pode ser o computador ou um membro do servidor.
         """
         client = self.client
-
+        self._create_table()
         if ctx.author.id not in alias.keys() and ctx.author.id not in alias.values():
             if userplayer != ctx.author: #and userplayer != client.user.id:
                 if userplayer != "computador" and isinstance(userplayer, discord.Member):
@@ -60,9 +111,11 @@ class Chess(commands.Cog):
                     userplayer = ctx.me
                     difficultylist = {"facinho" : 0, "fácil" : 5, "médio" : 10, "difícil" : 15, "hardicori" : 20}
                     await ctx.send("Qual dificuldade você deseja:\n Facinho, fácil, médio, difícil ou hardicori?")
+
                     def check(message):
                         msgcon = message.content.lower() in difficultylist.keys()
                         return message.author.id == ctx.author.id and message.channel == ctx.channel and msgcon
+
                     try:
                         message = await client.wait_for("message",
                                                         check=check,
@@ -70,10 +123,10 @@ class Chess(commands.Cog):
                     except asyncio.TimeoutError:
                         await ctx.send("Oh não! VocÊ demorou muito para responder. :pensive:")
                         return
-                    
                     else:
                         content = message.content.lower()
                         dificuldade = difficultylist[content]
+
                 channel = channels[userplayer.id] = await self.create_channel(ctx, userplayer)
                 await channel.send(f"{mentions} Que os jogos comecem!")
                 rdm = random.randint(1, 2)
@@ -94,7 +147,6 @@ class Chess(commands.Cog):
                 await channel.send(f"{ctx.author.mention} Você é o {color}")
                 await self.imageboard(ctx, list(brd[alias[ctx.author.id]])[0])
                 logging.info("Nova partida de xadrez criada.")
-
         else:
             await ctx.reply('Você já tem uma partida em andamento.')
 
@@ -118,7 +170,6 @@ class Chess(commands.Cog):
         return channel
 
     async def imageboard(self, ctx, tab, move= None):
-        print(tab.fen())
         square = None
         if tab.is_check():
             pieces = tab.pieces(piece_type=chess.KING, color=tab.turn)
@@ -129,9 +180,13 @@ class Chess(commands.Cog):
 
         svg2png(bytestring=a, write_to='outputboard.png')
         file = discord.File('outputboard.png')
+
         embed = discord.Embed(color=ctx.guild.me.top_role.color)
-        embed.set_image(url= "attachment://outputboard.png")
-        embed.set_footer(text=" Utilize ,xadrez <coordenada inicial> <coordenada final> para jogar.\nUtilize ,xadrez_finalizar para desistir.")
+
+        embed.set_image(url="attachment://outputboard.png")
+        embed.set_footer(text="Utilize ,xadrez <coordenada inicial> <coordenada final> para jogar."
+                "\nUtilize `,xadfi` para desistir.")
+
         await channel.send(file = file, embed= embed)
         if tab.is_game_over() == False:
              turn = self.turn(ctx)
@@ -170,13 +225,15 @@ class Chess(commands.Cog):
         try:
             channel = channels[alias[ctx.author.id]]
         except KeyError:
-            logging.warn("Não foi possível pegar o canal onde a partida aconteceu.")
+            logging.warning("Não foi possível pegar o canal onde a partida aconteceu.")
             return
         if winner != None:
             if isinstance(winner, int):
                 winner = ctx.guild.get_member(winner)
-            await channel.send(embed= discord.Embed(title=f"Partida finalizada", description= f'{winner.mention} foi o vencedor. Parabéns!').set_image(url='https://img1.recadosonline.com/713/006.gif'))
-        await asyncio.sleep(60)
+            await channel.send(embed= discord.Embed(title=f"Partida finalizada",
+                                                    description= f'{winner.mention} foi o vencedor. Parabéns!').set_image(url='https://img1.recadosonline.com/713/006.gif'))
+        self._post_winner(winner)
+        await asyncio.sleep(45)
         await channel.delete()
 
         user1 = list(brd[alias[ctx.author.id]])[1]
@@ -234,7 +291,13 @@ class Chess(commands.Cog):
                         await self.end_match(ctx, list(brd[alias[ctx.author.id]])[1])
 
         except KeyError:
-            await ctx.reply("Você não tem uma partida em andamento. Inicie uma com `,xadin`.")
+            # por algum motivo esse pedaço de código é executado
+            # quando o canal é deletado no end_match e por causa disso o discord.py joga um
+            # NotFound.
+            try:
+                await ctx.reply("Você não tem uma partida em andamento. Inicie uma com `,xadin`.")
+            except discord.NotFound:
+                return
 
 def setup(client):
     client.add_cog(Chess(client))

@@ -2,13 +2,16 @@
 
 from collections import namedtuple
 from discord.ext import commands
+from typing import *
 
 import sqlite3
+import aiosqlite
+import asyncio
 
 Field = namedtuple("Field", ("name", "type"))
 
 class DatabaseWrap:
-    def __init__(self, database):
+    def __init__(self, database: sqlite3.Connection):
         self.cursor = database.cursor()
         self.database = database
         self.closed = False
@@ -33,13 +36,19 @@ class DatabaseWrap:
         self.cursor.execute(sql)
         self.database.commit()
 
-    def get_item(self, table_name: str, where: str, item_name: str=None):
+    def get_item(self, table_name: str, where: str=None, item_name: str=None):
         if item_name is None:
             item_name = "*"
 
-        sql = f"""SELECT {item_name} FROM {table_name} WHERE {where}"""
+        sql = f"SELECT {item_name} FROM {table_name}"
+        if where:
+            sql += f" WHERE {where}"
         self.cursor.execute(sql)
-        fetched = self.cursor.fetchone()
+
+        if item_name == "*":
+            fetched = self.cursor.fetchall()
+        else:
+            fetched = self.cursor.fetchone()
 
         return fetched
 
@@ -59,6 +68,15 @@ class DatabaseWrap:
             self.closed = True
             self.database.close()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            raise exc_val
+        self.database.commit()
+        self.database.close()
+
     def reopen(self):
         """
         Reabre a conexão com o banco de dados
@@ -70,6 +88,70 @@ class DatabaseWrap:
         if self.closed:
             ins = DatabaseWrap.from_filepath("main.db")
             return ins
+
+class AsyncDatabaseWrap(DatabaseWrap):
+    def __init__(self, connection: aiosqlite.Connection):
+        self._connection = connection
+        self.closed = False
+        self._cursor: Optional[aiosqlite.Cursor] = None
+
+    async def create_table_if_absent(self, table_name: str, fields: List[Field]) -> None:
+        await self._create_cursor()
+
+        cl = []
+
+        for field in fields:
+            cl.append(f"{field.name}\t{field.type}")
+        joined = ",\n".join(cl)
+        sql = f"""
+        CREATE TABLE IF NOT EXISTS "{table_name}"(
+            {joined}
+        );
+        """
+        await self._cursor.execute(sql)
+        await self._connection.commit()
+
+    async def remove_item(self, table_name: str, condition: str):
+        sql = f"DELETE FROM {table_name} WHERE {condition}"
+
+        await self._cursor.execute(sql)
+        await self._connection.commit()
+
+    async def get_item(self, table_name: str, where: str=None, item_name: str=None):
+        if item_name is None:
+            item_name = "*"
+
+        sql = f"SELECT {item_name} FROM {table_name}"
+        if where:
+            sql += f" WHERE {where}"
+        await self._cursor.execute(sql)
+
+        if item_name == "*":
+            fetched = await self._cursor.fetchall()
+        else:
+            fetched = await self._cursor.fetchone()
+
+        return fetched
+
+    async def _create_cursor(self):
+        if self._cursor is not None:
+            self._cursor = await self._connection.cursor()
+
+    @classmethod
+    async def from_filepath(cls, filename):
+        return cls(await aiosqlite.connect(filename))
+
+    async def __aenter__(self):
+        await self._create_cursor()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+    async def close(self):
+        if not self.closed:
+            await self._connection.close()
+            self.closed = True
 
 def is_blacklisted():
     connection = DatabaseWrap.from_filepath("main.db")

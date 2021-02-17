@@ -1,60 +1,130 @@
-from discord.ext import commands, tasks
+from discord.ext import commands, tasks, menus
 from typing import Optional
 from PIL import Image, ImageDraw
+from geopy.geocoders import Nominatim
 
 import discord
 import asyncio
 import random
 import io
+import datetime
+import aiohttp
 
+apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
+tempourl = "https://api.openweathermap.org/data/2.5/onecall?"
+geolocator = Nominatim(user_agent='joaovictor.lg020@gmail.com')
+
+class Tempo(menus.Menu):
+    def __init__(self, ctx, request, cidade):
+        super().__init__()
+        self.cidade = cidade
+        self.page = 0
+        self.ctx = ctx
+        self.request = request
+
+    async def get_weather(self, page):
+        ctx = self.ctx
+
+        if self.request.status != 404:
+
+            json = await self.request.json()
+            current = json["current"]
+            daily = json['daily'][page]
+            dt = datetime.datetime.utcnow()
+            dt1 = datetime.datetime(dt.year, dt.month, dt.day, 1)
+            dt1 = dt1 + datetime.timedelta(days=page)
+            dt1 = int(dt1.timestamp())
+
+            dt2 = datetime.datetime(dt.year, dt.month, dt.day, 23)
+            dt2 = dt2 + datetime.timedelta(days=page)
+            dt2 = int(dt2.timestamp())
+
+            # eu não sei, eu não quero saber, como a merda do João
+            # consegue fazer um código tão horrível ao ponto de
+            # parar de funcionar do dia pra noite.
+
+            if page == 0:
+                period = daily
+            else:
+                period = current
+
+            pop = daily["pop"]
+
+            current_temperature = period['temp']
+            if isinstance(current_temperature, dict):
+                current_temperature_day = current_temperature.get('day')
+            else:
+                current_temperature_day = current_temperature
+            current_temperature_celsiuis = str(round(current_temperature_day - 273.15))
+            current_humidity = period['humidity']
+            current_weather = period["weather"]
+            weather_description = current_weather[0]['description']
+
+            alerts = daily.get('alerts')
+
+            if alerts is not None:
+                alerts = alerts[0]['description']
+            else:
+                alerts = 'Nenhum'
+
+            icon = current_weather[0]['icon']
+            iconurl = f'http://openweathermap.org/img/wn/{icon}@2x.png'
+            dtnow = datetime.datetime.now() + datetime.timedelta(days=page)
+
+            dt = datetime.datetime.utcnow()
+            ctx = self.ctx
+
+            embed = discord.Embed(title=f"Tempo em {self.cidade} {dtnow.day}/{dt.month}/{dt.year}",
+                                  color=ctx.guild.me.top_role.color,
+                                  timestamp=ctx.message.created_at)
+
+            embed.add_field(name="Descrição", value=f"**{weather_description.capitalize()}**", inline=False)
+            embed.add_field(name="🌡️ Temperatura(C)", value=f"Média: **{current_temperature_celsiuis}°C**",
+                            inline=False)
+            embed.add_field(name="💦 Humildade(%)", value=f"**{current_humidity}%**", inline=False)
+            embed.add_field(name="☔ Chance de chuva(%)", value=f"**{pop * 100}%**", inline=False)
+            embed.add_field(name="⚠ Alertas:", value=f"**{alerts}**", inline=False)
+            embed.set_thumbnail(url=iconurl)
+            embed.set_footer(text=f"Requisitado por {ctx.author.name}")
+
+            return embed
+
+    async def send_initial_message(self, ctx, channel):
+        weather = await self.get_weather(page=self.page)
+        return await ctx.send(embed= weather)
+
+    @menus.button('⬅️')
+    async def on_left(self, payload):
+        if not self.page == 0:
+            self.page -= 1
+        weather = await self.get_weather(page=self.page)
+        await self.message.edit(embed=weather)
+
+    @menus.button('➡️')
+    async def on_right(self, payload):
+        if not self.page == 7:
+            self.page += 1
+        weather = await self.get_weather(page=self.page)
+        await self.message.edit(embed=weather)
 
 class Fun(commands.Cog):
     def __init__(self, client):
         self.client = client
-        self.messages = {}
-        self.messages_task.start()
-
-    @commands.Cog.listener()
-    async def on_message_delete(self, message):
-        self.messages[message.channel.id] = message
-
-    @tasks.loop(minutes=2)
-    async def messages_task(self):
-        try:
-            keyview = list(self.messages.keys())
-            key = keyview[len(keyview) - 1]
-
-            del self.messages[key]
-        except (IndexError, KeyError):
-            pass
-
-    @commands.command
-    async def snipe(self, ctx, channel: Optional[discord.TextChannel]):
-        if channel is None:
-            channel = ctx.channel
-        try:
-            msg = self.messages[ctx.channel.id]
-        except KeyError:
-            await ctx.reply("Nada para snipar!")
-            return
-
-        embed = discord.Embed(description=msg.content, color=msg.author.color)
-        embed.set_author(name=msg.author, icon_url=msg.author.avatar_url)
-
-        await ctx.reply(embed=embed)
 
     @commands.command()
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def chatbot(self, ctx, *, texto: str):
         async with ctx.channel.typing():
-            if not hasattr(self.client, "chat_thread") or not self.client.chat_thread.available:
+            chat = self.client.chat_thread
+            
+            if not hasattr(self.client, "chat_thread") or not chat.available:
                 await ctx.reply("O comando `chatbot` não pôde ser executado por que"
-                                    "o chatter está indisponível ou não está ativado.")
+                                    " o chatter está indisponível.")
                 return
 
-            resposta = self.client.chat_thread.generate_response(texto)
-            await ctx.channel.send(f"{ctx.author.mention} " + str(resposta.text))
-            self.client.last_statements[ctx.author.id] = texto
+            resposta = chat.generate_response(texto)
+        await ctx.reply(resposta.text)
+        self.client.last_statements[ctx.author.id] = texto
 
     @commands.command(name="banrandom", aliases=["banc"])
     @commands.has_guild_permissions(ban_members=True)
@@ -173,13 +243,16 @@ class Fun(commands.Cog):
             await ctx.send(f"{ctx.author.mention} ele foi expulso.")
 
     @commands.command(aliases=["textao"])
-    @commands.cooldown(1, 120.0, commands.BucketType.guild)
+    @commands.cooldown(1, 120.0, commands.BucketType.channel)
     async def textão(self, ctx):
         """Faz um textão do tamanho do pinto do João."""
         with ctx.typing():
             await asyncio.sleep(120)
         await ctx.channel.send("lacrei manas")
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except discord.NotFound:
+            pass
 
 class Misc(commands.Cog):
     def __init__(self, client):
@@ -241,6 +314,30 @@ class Misc(commands.Cog):
                 files = [await att.to_file() for att in message.attachments]
 
             await ctx.author.send(embed=embed, files=files)
+
+    @commands.cooldown(1, 20.0, commands.BucketType.member)
+    @commands.command()
+    async def tempo(self, ctx, *, cidade: str):
+        """Verifica o tempo atual na sua cidade
+           """
+        cidade = cidade.capitalize()
+
+        if cidade.startswith('Cidade do'):
+            cidade = 'rolândia'
+
+        locator = geolocator.geocode(cidade)
+        urlcompleta = tempourl + "lat=" + str(locator.latitude) + "&lon=" + str(locator.longitude) + '&appid=' + apitempo + "&lang=pt_br"
+
+        async with aiohttp.ClientSession() as session:
+            #não é possível usar um gerenciador de contexto aqui porque
+            #o Tempo (classe) chama funções que só estão disponíveis quando
+            #a conexão ainda está aberta.
+
+            request = await session.get(urlcompleta)
+            w = Tempo(ctx, request, cidade)
+
+            await w.start(ctx)
+            del request
 
 def setup(client):
     client.add_cog(Misc(client))

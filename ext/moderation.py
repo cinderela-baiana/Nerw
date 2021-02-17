@@ -51,7 +51,6 @@ class Moderation(commands.Cog):
         wrap.create_table_if_absent("blacklisteds", fields)
 
         write_blacklist(user, reason)
-
         await ctx.reply(f"O usuário {user} foi banido de usar o bot.")
 
     @commands.command()
