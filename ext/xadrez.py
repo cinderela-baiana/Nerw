@@ -5,6 +5,7 @@ import asyncio
 from typing import Optional, Union
 import random
 import yaml
+import emoji
 import logging
 from cairosvg import svg2png
 import chess.svg
@@ -13,6 +14,7 @@ from discord.ext import menus
 import os
 import warnings
 import uuid
+import hashlib
 
 from Utils import DatabaseWrap, Field
 
@@ -35,6 +37,7 @@ class Chess(commands.Cog):
             file = "stockfish.exe"
             warnings.warn("O stockfish.exe deve estar na pasta config.", DeprecationWarning,
                           stacklevel=2)
+        self._wins = None
         self.engine = chess.engine.SimpleEngine.popen_uci(file)
         logging.info("engine do xadrez carregada!")
 
@@ -57,23 +60,55 @@ class Chess(commands.Cog):
         with DatabaseWrap.from_filepath("main.db") as wrap:
             wrap.database.execute("INSERT INTO chess_matches(match, winner) VALUES(?,?)", (match_id, winner))
 
-    @commands.command(aliases=["xadran"])
-    @commands.is_owner() # esse comando ainda não está pronto.
+    def calculate_positions(self, competitors):
+        max_num = 0
+        winn = []
+        if self._wins is not None:
+            return self._wins
+        for compt, score in competitors:
+            winn.insert(score, (compt, score))
+        if self._wins is not None:
+            self._wins = list(reversed(winn))
+        return list(reversed(winn))
+
+    def _refresh_wins(self):
+        """Força que o cálculo das posições seja feito
+         na próxima chamada ao calculate_position."""
+        self._wins = None
+
+    @commands.command(aliases=["xadr"]) # esse comando ainda não está pronto.
     async def xadrez_rank(self, ctx):
         with DatabaseWrap.from_filepath("main.db") as wrap:
-            wins = wrap.get_item("chess_matches", item_name="winner")
+            wins = wrap.get_item("chess_matches", item_name="winner", fetchall=True)
         winn = set()
 
-        if isinstance(wins, tuple):
-            for win_id in wins:
-                if win_id is None:
-                    continue
-                count = wins.count(win_id)
-                winn.add((win_id, count))
+        for win_id in wins:
+            if win_id is None:
+                continue
+            win_id = win_id[0]
+            count = wins.count((win_id,))
+            winn.add((win_id, count))
+
         descr = []
 
-        for winner_id, win_count in winn:
-            descr.append(f"{winner_id} - {win_count}")
+        big_chunk = list(enumerate(self.calculate_positions(winn), 1))
+
+        for position, (winner_id, win_count) in big_chunk:
+            user = ctx.guild.get_member(int(winner_id))
+            if user is None:
+                user = winner_id
+
+            # vai aparecer esses emojis da lista para o 1º, 2º e 3º
+            # lugar do ranking.
+            medals = [emoji.emojize(":trophy:"),
+                      emoji.emojize(":second_place:"),
+                      emoji.emojize(":third_place:")]
+            if position in [1, 2, 3]:
+                position = medals[position - 1]
+            else:
+                position = str(position) + "º"
+
+            descr.append(f"{position} {user} - {win_count}")
 
         await ctx.reply("\n".join(descr))
 
@@ -83,9 +118,12 @@ class Chess(commands.Cog):
         """
         Cria uma partida de xadrez.
         O oponente pode ser o computador ou um membro do servidor.
+
+        O motor utilizado para as jogadas do computador é o Stockfish.
         """
         client = self.client
         self._create_table()
+
         if ctx.author.id not in alias.keys() and ctx.author.id not in alias.values():
             if userplayer != ctx.author: #and userplayer != client.user.id:
                 if userplayer != "computador" and isinstance(userplayer, discord.Member):
@@ -101,7 +139,8 @@ class Chess(commands.Cog):
                     except asyncio.TimeoutError:
                         await ctx.send("Oh não! O usuário não reagiu a tempo.")
                         return
-                    else: pass
+                    else:
+                        pass
 
                 mentions = f"{ctx.author.mention} "
                 dificuldade = 0
@@ -181,7 +220,7 @@ class Chess(commands.Cog):
         svg2png(bytestring=a, write_to='outputboard.png')
         file = discord.File('outputboard.png')
 
-        embed = discord.Embed(color=ctx.guild.me.top_role.color)
+        embed = discord.Embed(color=ctx.guild.me.color)
 
         embed.set_image(url="attachment://outputboard.png")
         embed.set_footer(text="Utilize ,xadrez <coordenada inicial> <coordenada final> para jogar."
@@ -233,6 +272,7 @@ class Chess(commands.Cog):
             await channel.send(embed= discord.Embed(title=f"Partida finalizada",
                                                     description= f'{winner.mention} foi o vencedor. Parabéns!').set_image(url='https://img1.recadosonline.com/713/006.gif'))
         self._post_winner(winner)
+        self._refresh_wins()
         await asyncio.sleep(45)
         await channel.delete()
 
@@ -253,6 +293,10 @@ class Chess(commands.Cog):
 
     @commands.command(aliases=["xad"])
     async def xadrez(self, ctx, coord1, coord2):
+        """
+        Realiza uma jogada de xadrez.
+        Obviamente você precisa estar em uma partida de xadrez para utilizar esse comando.
+        """
         turn = self.turn(ctx)
         brdauth = list(brd[alias[ctx.author.id]])[0]
         try:
@@ -264,7 +308,8 @@ class Chess(commands.Cog):
                     await self.imageboard(ctx=ctx, tab=brdauth, move=Nf3)
                 else:
                     await ctx.reply('Este movimento não é permitido.')
-            else: await ctx.reply('Espera sua vez de jogar mano')
+            else:
+                await ctx.reply('Espera sua vez de jogar mano')
         except KeyError:
             await ctx.reply("Você não tem uma partida em andamento. Inicie uma com `,xadrez_iniciar`.")
 

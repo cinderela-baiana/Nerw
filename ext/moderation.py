@@ -1,5 +1,5 @@
 from discord.ext import commands
-from Utils import DatabaseWrap, Field
+from Utils import Field, create_async_database
 from dataclass import write_blacklist
 from typing import Union
 
@@ -40,15 +40,15 @@ class Moderation(commands.Cog):
         """Deixa uma pessoa na lista negra.
 
         A lista negra é uma lista de usuários que impede
-        eles de usarem os comandos do bot.
+        elas de usarem os comandos do bot.
 
         **Veja também**: Comando `whitelist`."""
         fields = (
             Field(name="user_id", type="TEXT NOT NULL"),
             Field(name="reason", type="TEXT")
         )
-        wrap = DatabaseWrap.from_filepath("main.db")
-        wrap.create_table_if_absent("blacklisteds", fields)
+        async with create_async_database("main.db") as wrap:
+            await wrap.create_table_if_absent("blacklisteds", fields)
 
         write_blacklist(user, reason)
         await ctx.reply(f"O usuário {user} foi banido de usar o bot.")
@@ -61,14 +61,49 @@ class Moderation(commands.Cog):
 
         **Veja também**: Comando `blacklist`.
         """
-        wrap = DatabaseWrap.from_filepath("main.db")
-        item = wrap.get_item("blacklisteds", f"user_id = {user.id}", "user_id")
+        async with create_async_database("main.db") as wrap:
+            item = await wrap.get_item("blacklisteds", f"user_id = {user.id}", "user_id")
 
-        if item is None:
-            return await ctx.reply(f"O usuário {user} não está banido.")
+            if item is None:
+                return await ctx.reply(f"O usuário {user} não está banido.")
 
-        wrap.remove_item("blacklisteds", f"user_id = {user.id}")
+            await wrap.remove_item("blacklisteds", f"user_id = {user.id}")
         await ctx.reply(f"O usuário {user} foi desbanido.")
+
+    @commands.command()
+    @commands.has_guild_permissions(manage_channels=True)
+    async def nick(self, ctx, user: discord.Member, *, new_nick: str):
+        """Altera o apelido de um usuário."""
+
+        await user.edit(nick=new_nick)
+        await ctx.reply(f"Alterado nick de {user} para {new_nick}!")
+
+    @commands.command()
+    @commands.has_permissions(kick_members=True)
+    @commands.bot_has_permissions(kick_members=True)
+    @commands.cooldown(1, 10, commands.BucketType.member)
+    async def kick(self, ctx, member: discord.Member, *, reason=None):
+        """
+        Expulsa um usuário.
+
+        Você e o bot precisam da permissão `Expulsar membros`.
+        """
+        if member == ctx.message.author:
+            await ctx.channel.send("Você não pode se expulsar!")
+            return
+
+        emoji = self.client.get_emoji(793335773892968502)
+        if emoji is None:
+            emoji = "🔨"
+        embed = discord.Embed(title=f"{emoji} {member} foi expulso!",
+
+
+                                      description=f"**Motivo:** *{reason}*",
+                                      color=0x00ff9d)
+        embed.set_footer(text="Não façam como ele crianças, respeitem as regras.")
+        await member.kick(reason=f"{reason}; Ação efetuada por {ctx.author}")
+        await ctx.channel.send(embed=embed)
+        await ctx.message.delete()
 
 def setup(client):
     client.add_cog(Moderation(client))

@@ -1,7 +1,8 @@
 from discord.ext import commands, tasks, menus
-from typing import Optional
 from PIL import Image, ImageDraw
 from geopy.geocoders import Nominatim
+from typing import *
+from chatter_thread import ChatterThread
 
 import discord
 import asyncio
@@ -9,7 +10,6 @@ import random
 import io
 import datetime
 import aiohttp
-
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
 tempourl = "https://api.openweathermap.org/data/2.5/onecall?"
 geolocator = Nominatim(user_agent='joaovictor.lg020@gmail.com')
@@ -110,6 +110,7 @@ class Tempo(menus.Menu):
 class Fun(commands.Cog):
     def __init__(self, client):
         self.client = client
+        self.last_statements = {}
 
     @commands.command()
     @commands.cooldown(1, 15, commands.BucketType.member)
@@ -124,9 +125,27 @@ class Fun(commands.Cog):
 
             resposta = chat.generate_response(texto)
         await ctx.reply(resposta.text)
-        self.client.last_statements[ctx.author.id] = texto
+        self.last_statements[ctx.author.id] = texto
 
-    @commands.command(name="banrandom", aliases=["banc"])
+    @commands.command()
+    @commands.cooldown(1, 15, commands.BucketType.member)
+    async def include(self, ctx, *, texto: str):
+        try:
+            stat = self.last_statements[ctx.author.id]
+        except KeyError:
+            await ctx.reply("Você não usou o `,chatbot`.")
+
+        async with ctx.channel.typing():
+            chat: ChatterThread  = self.client.chat_thread
+
+            if not hasattr(self.client, "chat_thread") or not chat.available:
+                await ctx.reply("O comando `include` não pôde ser executado por que"
+                                " o chatter está indisponível.")
+                return
+            chat.learn_response(texto, self.last_statements[ctx.author.id])
+            await ctx.reply("Sua resposta foi gravada.")
+
+    @commands.command(name="banrandom", aliases=["banr"])
     @commands.has_guild_permissions(ban_members=True)
     @commands.bot_has_guild_permissions(ban_members=True)
     async def randomban(self, ctx):
@@ -209,7 +228,6 @@ class Fun(commands.Cog):
             file = discord.File(fp, "palette.png")
 
         await ctx.reply(file=file)
-
 
     @commands.command(name="kickrandom", aliases=["kickr"])
     @commands.has_guild_permissions(kick_members=True)

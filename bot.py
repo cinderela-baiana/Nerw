@@ -8,17 +8,14 @@ import os
 import traceback
 import sys
 
-from dataclass import SingleGuildData, write_reaction_messages_to_file, write_blacklist
+from dataclass import write_reaction_messages_to_file
 from typing import Optional
-from discord.ext import commands, tasks, menus
 from itertools import cycle
-from Tasks import Tasks
-from Utils import Field, AsyncDatabaseWrap
+from Utils import Field, create_async_database
 from chatter_thread import ChatterThread
-from chatterbot import ChatBot
 from errors import UserBlacklisted
-from discord.ext import commands, tasks, menus
-from PIL import Image, ImageDraw
+from discord.ext import commands, tasks
+from overrides import Gamera
 
 logging.basicConfig(level=logging.INFO)
 
@@ -41,7 +38,7 @@ with open("config/activities.json") as fp:
 with open('config/credentials.yaml') as t:
     credentials = yaml.load(t)
 
-client = commands.Bot(command_prefix=credentials.get("PREFIXO"), case_insensitive=True,
+client = commands.Bot(command_prefix=commands.when_mentioned_or(credentials.get("PREFIXO")), case_insensitive=True,
                       intents=intents, allowed_mentions=allowed_mentions)
 snipes = {}
 client.remove_command("help")
@@ -55,19 +52,17 @@ def load_all_extensions(*, folder=None):
     filt = filter(lambda fold: fold.endswith(".py") and not fold.startswith("_"), os.listdir(folder))
     for file in filt:
         r = f"{folder}.{file.replace('.py', '')}"
-        print(r)
         client.load_extension(r)
 
 
 load_all_extensions()
 
-
 @tasks.loop(minutes=5)
 async def presence_setter():
     payload = next(activities)
+    discord.ActivityType.listening
     activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
     await client.change_presence(activity=activity, status=payload.get("status", "online"))
-
 
 @tasks.loop(minutes=2)
 async def remove_snipes():
@@ -78,10 +73,9 @@ async def remove_snipes():
         except IndexError:
             pass
 
-
 @client.event
 async def on_ready():
-    logging.info('Bot pronto como ' + str(client.user))
+    logging.info('Bot pronto como ' + str(client.user) + "  (" + str(client.user.id) + ")")
     if not hasattr(client, "chat_thread"):
         client.chat_thread = ChatterThread()
         client.chat_thread.start()
@@ -90,11 +84,10 @@ async def on_ready():
     presence_setter.start()
     remove_snipes.start()
 
-
 @client.event
 async def on_disconnect():
     presence_setter.stop()
-    client.chat_thread.stop()
+    client.chat_thread.close()
     remove_snipes.stop()
 
 @client.event
@@ -103,7 +96,6 @@ async def on_resume():
     presence_setter.start()
     remove_snipes.start()
 
-
 @client.event
 async def on_message_delete(message):
     snipes_channel = snipes.get(message.channel.id)
@@ -111,28 +103,26 @@ async def on_message_delete(message):
         snipes[message.channel.id] = []
     snipes[message.channel.id].append(message)
 
-
 @client.check
 async def blacklist(ctx):
     fields = (
         Field(name="user_id", type="TEXT NOT NULL"),
         Field(name="reason", type="TEXT")
     )
-    async with AsyncDatabaseWrap.from_filepath("main.db") as wrap:
-        wrap.create_table_if_absent("blacklisteds", fields)
-        item = wrap.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
+    async with create_async_database("main.db") as wrap:
+        await wrap.create_table_if_absent("blacklisteds", fields)
+        item = await wrap.get_item("blacklisteds", f"user_id = {ctx.author.id}", 'user_id')
 
     if item is None:
         return True
     raise UserBlacklisted
-
 
 @client.event
 async def on_raw_reaction_add(struct):
     if struct.guild_id is None:
         return None  # ignorar DMs
 
-    async with AsyncDatabaseWrap.from_filepath("main.db") as wrap:
+    async with create_async_database("main.db") as wrap:
 
         fields = (
             Field(name="channel", type="TEXT"),
@@ -163,7 +153,7 @@ async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
     if struct.guild_id is None:
         return None  # ignorar DMs
 
-    async with AsyncDatabaseWrap.from_filepath("main.db") as wrap:
+    async with create_async_database("main.db") as wrap:
 
         fields = (
             Field(name="channel", type="TEXT"),
@@ -192,7 +182,6 @@ async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
 @client.event
 async def on_message(message):
     await client.process_commands(message)
-
 
 @client.event
 async def on_command_error(ctx, error):
@@ -236,12 +225,16 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.DisabledCommand):
         await ctx.reply("O comando está desabilitado.")
 
+    elif isinstance(error, commands.MissingPermissions):
+        missing = ", ".join(error.missing_perms)
+        await ctx.reply(f"Você não tem as seguintes permissões: `{missing}`")
+
     elif isinstance(error, UserBlacklisted):
-        async with AsyncDatabaseWrap.from_filepath("main.db") as connection:
+        async with create_async_database("main.db") as connection:
             reason = await connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", "reason")
             try:
                 reason = reason[0]
-            except IndexError:  # não tem um motivo
+            except (IndexError, TypeError):  # não tem um motivo
                 reason = "Nenhum..."
 
         await ctx.reply(f"Saia, você entrou pra lista negra. Motivo: **{reason}**")
@@ -296,6 +289,7 @@ async def mute_user(ctx, user):
 
 
 @client.command()
+@commands.cooldown(2, 5, commands.BucketType.channel)
 async def snipe(ctx):
     snipe_arr = snipes.get(ctx.channel.id)
     if snipe_arr is None:
@@ -393,7 +387,7 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
     if channel is None:
         channel = ctx.channel
 
-    async with AsyncDatabaseWrap.from_filepath("main.db") as db:
+    async with create_async_database("main.db") as db:
         fields = (
             Field(name="guild", type="TEXT NOT NULL"),
             Field(name="channel", type="TEXT NOT NULL")

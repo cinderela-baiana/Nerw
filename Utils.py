@@ -6,7 +6,19 @@ from typing import *
 
 import sqlite3
 import aiosqlite
+import contextlib
 import asyncio
+import pathlib
+
+PathLike = Union[str, pathlib.Path]
+
+@contextlib.asynccontextmanager
+async def create_async_database(path: PathLike):
+    connection = await AsyncDatabaseWrap.from_filepath(path)
+    try:
+        yield connection
+    finally:
+        await connection.close()
 
 Field = namedtuple("Field", ("name", "type"))
 
@@ -36,7 +48,7 @@ class DatabaseWrap:
         self.cursor.execute(sql)
         self.database.commit()
 
-    def get_item(self, table_name: str, where: str=None, item_name: str=None):
+    def get_item(self, table_name: str, where: str=None, item_name: str=None, *, fetchall=False):
         if item_name is None:
             item_name = "*"
 
@@ -45,11 +57,10 @@ class DatabaseWrap:
             sql += f" WHERE {where}"
         self.cursor.execute(sql)
 
-        if item_name == "*":
+        if fetchall:
             fetched = self.cursor.fetchall()
         else:
             fetched = self.cursor.fetchone()
-
         return fetched
 
     def remove_item(self, table_name: str, condition: str):
@@ -97,7 +108,6 @@ class AsyncDatabaseWrap(DatabaseWrap):
 
     async def create_table_if_absent(self, table_name: str, fields: List[Field]) -> None:
         await self._create_cursor()
-
         cl = []
 
         for field in fields:
@@ -112,12 +122,14 @@ class AsyncDatabaseWrap(DatabaseWrap):
         await self._connection.commit()
 
     async def remove_item(self, table_name: str, condition: str):
+        await self._create_cursor()
         sql = f"DELETE FROM {table_name} WHERE {condition}"
 
         await self._cursor.execute(sql)
         await self._connection.commit()
 
     async def get_item(self, table_name: str, where: str=None, item_name: str=None):
+        await self._create_cursor()
         if item_name is None:
             item_name = "*"
 
@@ -134,11 +146,13 @@ class AsyncDatabaseWrap(DatabaseWrap):
         return fetched
 
     async def _create_cursor(self):
-        if self._cursor is not None:
+        if self._cursor is None:
             self._cursor = await self._connection.cursor()
 
     @classmethod
-    async def from_filepath(cls, filename):
+    async def from_filepath(cls, filename: PathLike):
+        if isinstance(filename, pathlib.Path):
+            filename = filename.resolve()
         return cls(await aiosqlite.connect(filename))
 
     async def __aenter__(self):
