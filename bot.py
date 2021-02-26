@@ -1,4 +1,4 @@
-import discord
+﻿import discord
 import yaml
 import asyncio
 import logging
@@ -15,7 +15,6 @@ from Utils import Field, create_async_database
 from chatter_thread import ChatterThread
 from errors import UserBlacklisted
 from discord.ext import commands, tasks
-from overrides import Gamera
 
 logging.basicConfig(level=logging.INFO)
 
