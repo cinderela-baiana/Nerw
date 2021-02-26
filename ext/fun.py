@@ -25,69 +25,62 @@ class Tempo(menus.Menu):
     async def get_weather(self, page):
         ctx = self.ctx
 
-        if self.request.status != 404:
+        if self.request.status == 404:
+            return
 
-            json = await self.request.json()
-            current = json["current"]
-            daily = json['daily'][page]
-            dt = datetime.datetime.utcnow()
-            dt1 = datetime.datetime(dt.year, dt.month, dt.day, 1)
-            dt1 = dt1 + datetime.timedelta(days=page)
-            dt1 = int(dt1.timestamp())
+        json = await self.request.json()
 
-            dt2 = datetime.datetime(dt.year, dt.month, dt.day, 23)
-            dt2 = dt2 + datetime.timedelta(days=page)
-            dt2 = int(dt2.timestamp())
+        current = json["current"]
+        daily = json['daily'][page]
+        dt = datetime.datetime.utcnow()
+        dt1 = datetime.datetime(dt.year, dt.month, dt.day, 1)
+        dt1 = dt1 + datetime.timedelta(days=page)
+        dt1 = int(dt1.timestamp())
 
-            # eu não sei, eu não quero saber, como a merda do João
-            # consegue fazer um código tão horrível ao ponto de
-            # parar de funcionar do dia pra noite.
+        dt2 = datetime.datetime(dt.year, dt.month, dt.day, 23)
+        dt2 = dt2 + datetime.timedelta(days=page)
+        dt2 = int(dt2.timestamp())
 
-            if page == 0:
-                period = daily
-            else:
-                period = current
+        period = daily
 
-            pop = daily["pop"]
+        pop = daily["pop"]
 
-            current_temperature = period['temp']
-            if isinstance(current_temperature, dict):
-                current_temperature_day = current_temperature.get('day')
-            else:
-                current_temperature_day = current_temperature
-            current_temperature_celsiuis = str(round(current_temperature_day - 273.15))
-            current_humidity = period['humidity']
-            current_weather = period["weather"]
-            weather_description = current_weather[0]['description']
+        current_temperature = period['temp']
+        current_temperature_day = current_temperature.get('day')
 
-            alerts = daily.get('alerts')
+        current_temperature_celsiuis = str(round(current_temperature_day - 273.15))
+        current_humidity = period['humidity']
+        current_weather = period["weather"]
+        weather_description = current_weather[0]['description']
 
-            if alerts is not None:
-                alerts = alerts[0]['description']
-            else:
-                alerts = 'Nenhum'
+        alerts = daily.get('alerts')
 
-            icon = current_weather[0]['icon']
-            iconurl = f'http://openweathermap.org/img/wn/{icon}@2x.png'
-            dtnow = datetime.datetime.now() + datetime.timedelta(days=page)
+        if alerts is not None:
+            alerts = alerts[0]['description']
+        else:
+            alerts = 'Nenhum'
 
-            dt = datetime.datetime.utcnow()
-            ctx = self.ctx
+        icon = current_weather[0]['icon']
+        iconurl = f'http://openweathermap.org/img/wn/{icon}@2x.png'
+        dtnow = datetime.datetime.now() + datetime.timedelta(days=page)
 
-            embed = discord.Embed(title=f"Tempo em {self.cidade} {dtnow.day}/{dt.month}/{dt.year}",
-                                  color=ctx.guild.me.top_role.color,
-                                  timestamp=ctx.message.created_at)
+        dt = datetime.datetime.utcnow()
+        ctx = self.ctx
 
-            embed.add_field(name="Descrição", value=f"**{weather_description.capitalize()}**", inline=False)
-            embed.add_field(name="🌡️ Temperatura(C)", value=f"Média: **{current_temperature_celsiuis}°C**",
-                            inline=False)
-            embed.add_field(name="💦 Humildade(%)", value=f"**{current_humidity}%**", inline=False)
-            embed.add_field(name="☔ Chance de chuva(%)", value=f"**{pop * 100}%**", inline=False)
-            embed.add_field(name="⚠ Alertas:", value=f"**{alerts}**", inline=False)
-            embed.set_thumbnail(url=iconurl)
-            embed.set_footer(text=f"Requisitado por {ctx.author.name}")
+        embed = discord.Embed(title=f"Tempo em {self.cidade} {dtnow.day}/{dtnow.month}/{dtnow.year}",
+                              color=ctx.guild.me.top_role.color,
+                              timestamp=ctx.message.created_at)
 
-            return embed
+        embed.add_field(name="Descrição", value=f"**{weather_description.title()}**", inline=False)
+        embed.add_field(name="🌡️ Temperatura (ºC)", value=f"Média: **{current_temperature_celsiuis}°C**",
+                        inline=False)
+        embed.add_field(name="💦 Humildade(%)", value=f"**{current_humidity}%**", inline=False)
+        embed.add_field(name="☔ Chance de chuva(%)", value=f"**{pop * 100}%**", inline=False)
+        embed.add_field(name="⚠ Alertas:", value=f"**{alerts}**", inline=False)
+        embed.set_thumbnail(url=iconurl)
+        embed.set_footer(text=f"Requisitado por {ctx.author.name}")
+
+        return embed
 
     async def send_initial_message(self, ctx, channel):
         weather = await self.get_weather(page=self.page)
@@ -115,6 +108,10 @@ class Fun(commands.Cog):
     @commands.command()
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def chatbot(self, ctx, *, texto: str):
+        """'Conversa' com o chatbot.
+
+        Uma resposta pode demorar de 5 a 15 segundos."""
+
         async with ctx.channel.typing():
             chat = self.client.chat_thread
             
@@ -130,13 +127,22 @@ class Fun(commands.Cog):
     @commands.command()
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def include(self, ctx, *, texto: str):
+        """
+        Coloca uma nova possível resposta para a última pergunta
+        executada com o `,chatbot`.
+
+        **Nota**: Não é 100% de certeza que da próxima vez que você
+        invocar o comando novamente, você irá receber a resposta inserida, e o bot
+        também aprende essa resposta para aplicar em outras perguntas.
+        """
         try:
             stat = self.last_statements[ctx.author.id]
         except KeyError:
             await ctx.reply("Você não usou o `,chatbot`.")
+            return
 
         async with ctx.channel.typing():
-            chat: ChatterThread  = self.client.chat_thread
+            chat: ChatterThread = self.client.chat_thread
 
             if not hasattr(self.client, "chat_thread") or not chat.available:
                 await ctx.reply("O comando `include` não pôde ser executado por que"
@@ -162,13 +168,14 @@ class Fun(commands.Cog):
                 return reaction.emoji in ["👍", "👎"] and user.id == ctx.author.id and reaction.message.id == msg.id
             reaction, user = await client.wait_for("reaction_add", check=react, timeout=30.0)
         except asyncio.TimeoutError:
-            await ctx.send("comando cancelado.")
+            return
         else:
             if reaction.emoji == "👎":
                 await ctx.send("comando cancelado.")
                 return
             invite = random.choice(await ctx.guild.invites())
 
+            # só pegar membros que tem cargo menor que o do bot (para evitar erros)
             memb = random.choice(list(filter(lambda member : member.top_role < ctx.me.top_role, ctx.guild.members)))
             await ctx.send(f"Eu escolhi {memb} pra ser banido :smiling_imp:...")
 
@@ -219,6 +226,13 @@ class Fun(commands.Cog):
     @commands.command()
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def domin(self, ctx, member: Optional[discord.Member]):
+        """
+        Pega a cor dominante do seu avatar ou do membro *member*.
+
+        As vezes a cor retornada, pode parecer não ser precisa, mas é basicamente
+        a cor com a maior quantidade de pixels coloridos com aquela cor, então
+        pode variar com o tamanho da imagem.
+        """
         avatar = (member or ctx.author).avatar_url
 
         colors = self.get_colors(await avatar.read())
@@ -233,7 +247,7 @@ class Fun(commands.Cog):
     @commands.has_guild_permissions(kick_members=True)
     @commands.bot_has_guild_permissions(kick_members=True)
     async def kickrandom(self, ctx):
-        """Bane alguém aleatóriamente"""
+        """Expulsa alguém aleatóriamente."""
 
         client = self.client
 
@@ -246,7 +260,7 @@ class Fun(commands.Cog):
                 return reaction.emoji in ["👍", "👎"] and user.id == ctx.author.id and reaction.message.id == msg.id
             reaction, user = await client.wait_for("reaction_add", check=react, timeout=30.0)
         except asyncio.TimeoutError:
-            await ctx.send("comando cancelado.")
+            return
         else:
             if reaction.emoji == "👎":
                 await ctx.send("comando cancelado.")
@@ -283,19 +297,17 @@ class Misc(commands.Cog):
 
     @commands.command()
     @commands.cooldown(1, 10.0, commands.BucketType.member)
-    async def enviar(self, ctx, user: discord.Member, *, msg: str):
+    async def enviar(self, ctx, user: Union[discord.Member, discord.User], *, msg: str):
         """Envia uma mensagem para a dm da pessoa mencionada.
         é necessário de que a DM dela esteja aberta."""
-        try:
-            files = [await att.to_file() for att in ctx.message.attachments]
-            await user.send(msg, files=files)
-            await user.send(embed=discord.Embed(title="Responda seu amigo (ou inimigo) anônimo!",
-                                            description="Para responder use `,responder <mensagem>`",
-                                            color=0xff0000))
+        files = [await att.to_file() for att in ctx.message.attachments]
+        await user.send(msg, files=files)
+        await user.send(embed=discord.Embed(title="Responda seu amigo (ou inimigo) anônimo!",
+                        description="Para responder use `,responder <mensagem>`",
+                        color=self._get_embed_color(ctx)))
+        if ctx.guild is not None:
+            # não pode apagar mensagens do destinatário na DM
             await ctx.message.delete()
-
-        except discord.HTTPException:
-            await ctx.reply("A mensagem não pôde ser enviada. Talvez o usuário esteja com a DM bloqueada.", delete_after=10)
 
         def check(message):
             msgcon = message.content.startswith(",responder")
@@ -305,18 +317,16 @@ class Misc(commands.Cog):
         channel = guild.get_channel(790744527941009480)
 
         enviar_embed = discord.Embed(title=",enviar usado.", description=ctx.message.content,
-                            color=discord.Color.red())
+                            color=self._get_embed_color(ctx))
         enviar_embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
         await channel.send(embed=enviar_embed)
-
 
         try:
             message = await self.client.wait_for("message",
                                             check=check,
                                             timeout=300.0)
         except asyncio.TimeoutError:
-            await user.send("Oh não! VocÊ demorou muito para responder. :sad:")
-            pass
+           return
         else:
             con = " ".join(message.content.split(" ")[1:])
 
@@ -338,7 +348,7 @@ class Misc(commands.Cog):
     async def tempo(self, ctx, *, cidade: str):
         """Verifica o tempo atual na sua cidade
            """
-        cidade = cidade.capitalize()
+        cidade = cidade.title()
 
         if cidade.startswith('Cidade do'):
             cidade = 'rolândia'
@@ -356,6 +366,11 @@ class Misc(commands.Cog):
 
             await w.start(ctx)
             del request
+
+    def _get_embed_color(self, ctx: commands.Context):
+        if isinstance(ctx.me, discord.ClientUser): # estamos em uma DM.
+            return discord.Color.dark_red()
+        return ctx.me.color
 
 def setup(client):
     client.add_cog(Misc(client))

@@ -1,4 +1,4 @@
-from discord.ext import commands
+﻿from discord.ext import commands
 import chess
 import discord
 import asyncio

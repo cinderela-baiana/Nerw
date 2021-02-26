@@ -1,10 +1,36 @@
 [
 	{
 		"name": "Mr. Robot",
-		"type": 3
+		"type": 3,
+		"status": "idle"
 	},
 	{
 		"name": "Rocket League",
-		"type": 5
+		"type": 5,
+		"status": "dnd"
+	},
+	{
+		"name": "Cyberpunk 2077"
+	},
+	{
+		"name": "TheoTown"
+	},
+	{
+		"name": "IMSCARED"
+	},
+	{
+		"name": "Borderlands 2"
+	},
+	{
+		"name": "The Weeknd",
+		"type": 2
+	},
+	{
+		"name": "Outer Wilds",
+		"status": "dnd"
+	},
+	{
+		"name": "Kindergarten",
+		"status": "idle"
 	}
 ]

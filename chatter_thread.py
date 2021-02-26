@@ -25,7 +25,7 @@ LearnResponseRequest = namedtuple("LearnResponseRequest", ("question", "statemen
 
 class ChatterThread(threading.Thread):
     """
-    Processo que cuida da parte do Chatter.
+    Thread que cuida da parte do Chatter.
     Ver também: comando `chatbot`.
     """
     def __init__(self, *args, **kwargs):

@@ -37,7 +37,14 @@ with open("config/activities.json") as fp:
 with open('config/credentials.yaml') as t:
     credentials = yaml.load(t)
 
-client = commands.Bot(command_prefix=commands.when_mentioned_or(credentials.get("PREFIXO")), case_insensitive=True,
+def is_canary():
+    return credentials.get("ENVIROMENT", "STABLE") == "CANARY"
+
+prefix = credentials.get("PREFIXO")
+if is_canary():
+    prefix = credentials.get("CANARY_PREFIX")
+
+client = commands.Bot(command_prefix=commands.when_mentioned_or(prefix), case_insensitive=True,
                       intents=intents, allowed_mentions=allowed_mentions)
 snipes = {}
 client.remove_command("help")
@@ -59,7 +66,6 @@ load_all_extensions()
 @tasks.loop(minutes=5)
 async def presence_setter():
     payload = next(activities)
-    discord.ActivityType.listening
     activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
     await client.change_presence(activity=activity, status=payload.get("status", "online"))
 
@@ -449,5 +455,5 @@ async def unlex(ctx, *, extension: str):
         return
     await ctx.reply("Extensão descarregada :+1:")
 
-
-client.run(credentials.get("TOKEN"))
+token = credentials.get("CANARY_TOKEN") if is_canary() else credentials.get("TOKEN")
+client.run(token)

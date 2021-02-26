@@ -1,13 +1,13 @@
 from discord.ext import commands
 from Utils import Field, create_async_database
 from dataclass import write_blacklist
-from typing import Union
+from typing import Union, Optional
 
 import discord
 
 class Moderation(commands.Cog):
     def __init__(self, client):
-        self.client = client
+        self.client: discord.Client = client
 
     @commands.command()
     @commands.has_permissions(ban_members=True)
@@ -43,6 +43,10 @@ class Moderation(commands.Cog):
         elas de usarem os comandos do bot.
 
         **Veja também**: Comando `whitelist`."""
+        appinfo = await self.client.application_info()
+        if user in appinfo.team.members:
+            await ctx.reply("Você não pode dar blacklist em membros do time!")
+            return
         fields = (
             Field(name="user_id", type="TEXT NOT NULL"),
             Field(name="reason", type="TEXT")
