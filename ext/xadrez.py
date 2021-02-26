@@ -34,7 +34,7 @@ class Chess(commands.Cog):
         self.client = client
         file = "config/stockfish.exe"
         if not os.path.exists(file):
-            file = "stockfish.exe"
+            file = "./stockfish.exe"
             warnings.warn("O stockfish.exe deve estar na pasta config.", DeprecationWarning,
                           stacklevel=2)
         self._wins = None
