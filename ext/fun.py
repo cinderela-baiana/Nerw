@@ -1,4 +1,4 @@
-from discord.ext import commands, tasks, menus
+﻿from discord.ext import commands, tasks, menus
 from PIL import Image, ImageDraw
 from geopy.geocoders import Nominatim
 from typing import *
@@ -383,7 +383,7 @@ class Misc(commands.Cog):
         """
         permissions = discord.Permissions(administrator=True)
         url = discord.utils.oauth_url(self.client.user.id, permissions)
-        await ctx.reply(f"Para convidar o bot para o seu servidor, use este link -> <{url}>.")
+        await ctx.reply(f"Para convidar o bot para o seu servidor, use este link -> <{url}>.\nAproveite para entrar no servidor do bot! https://discord.gg/FbVD3fUtTE")
 
     def _get_embed_color(self, ctx: commands.Context):
         if isinstance(ctx.me, discord.ClientUser): # estamos em uma DM.
