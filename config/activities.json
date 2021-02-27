@@ -1,13 +1,11 @@
 [
 	{
 		"name": "Mr. Robot",
-		"type": 3,
-		"status": "idle"
+		"type": 3
 	},
 	{
 		"name": "Rocket League",
-		"type": 5,
-		"status": "dnd"
+		"type": 5
 	},
 	{
 		"name": "Cyberpunk 2077"
@@ -26,11 +24,9 @@
 		"type": 2
 	},
 	{
-		"name": "Outer Wilds",
-		"status": "dnd"
+		"name": "Outer Wilds"
 	},
 	{
-		"name": "Kindergarten",
-		"status": "idle"
+		"name": "Kindergarten"
 	}
 ]

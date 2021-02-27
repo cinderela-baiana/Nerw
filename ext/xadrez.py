@@ -11,6 +11,7 @@ from cairosvg import svg2png
 import chess.svg
 import chess.engine
 from discord.ext import menus
+import secrets
 import os
 import warnings
 import uuid
@@ -27,15 +28,22 @@ channels = {}
 # importante: mudar isso pode quebrar o sistema de rankings do xadrez
 CHESS_TABLE_NAME = "chess_matches"
 
+def _get_executable_suffix():
+    import sys
+
+    if sys.platform == "win32":
+        return ".exe"
+    return ""
+
 class Chess(commands.Cog):
 
     def __init__(self, client):
         logging.info("Carregando engine do xadrez")
         self.client = client
-        file = "config/stockfish.exe"
+        file = "config/stockfish" + _get_executable_suffix()
         if not os.path.exists(file):
-            file = "./stockfish.exe"
-            warnings.warn("O stockfish.exe deve estar na pasta config.", DeprecationWarning,
+            file = "stockfish" + _get_executable_suffix()
+            warnings.warn("O executável do stockfish deve estar na pasta config.", DeprecationWarning,
                           stacklevel=2)
         self._wins = None
         self.engine = chess.engine.SimpleEngine.popen_uci(file)
@@ -51,12 +59,13 @@ class Chess(commands.Cog):
                 Field(name="winner", type="TEXT")
             ])
 
-    def _post_winner(self, winner):
+    def _post_winner(self, winner, match_id=None):
         if isinstance(winner, discord.Member):
             winner = winner.id
 
-        # uuid4() gera um UUID pseudoaleatório.
-        match_id = str(uuid.uuid4())
+        if match_id is None:
+            match_id = str(uuid.uuid4())
+
         with DatabaseWrap.from_filepath("main.db") as wrap:
             wrap.database.execute("INSERT INTO chess_matches(match, winner) VALUES(?,?)", (match_id, winner))
 
@@ -76,7 +85,7 @@ class Chess(commands.Cog):
          na próxima chamada ao calculate_position."""
         self._wins = None
 
-    @commands.command(aliases=["xadr"]) # esse comando ainda não está pronto.
+    @commands.command(aliases=["xadr", "xadran"])
     async def xadrez_rank(self, ctx):
         with DatabaseWrap.from_filepath("main.db") as wrap:
             wins = wrap.get_item("chess_matches", item_name="winner", fetchall=True)
@@ -133,8 +142,8 @@ class Chess(commands.Cog):
                         return user == userplayer and str(reaction.emoji)  == '👍' and reaction.message == mensagem
                     try:
                         reaction, user = await client.wait_for("reaction_add",
-                                                 check=checkreaction,
-                                                 timeout=120)
+                                                               check=checkreaction,
+                                                               timeout=120)
 
                     except asyncio.TimeoutError:
                         await ctx.send("Oh não! O usuário não reagiu a tempo.")
@@ -166,7 +175,8 @@ class Chess(commands.Cog):
                         content = message.content.lower()
                         dificuldade = difficultylist[content]
 
-                channel = channels[userplayer.id] = await self.create_channel(ctx, userplayer)
+                data = self._create_match_id(ctx.author, userplayer)
+                channel = channels[userplayer.id] = await self.create_channel(ctx, userplayer, match_id=data)
                 await channel.send(f"{mentions} Que os jogos comecem!")
                 rdm = random.randint(1, 2)
 
@@ -184,12 +194,16 @@ class Chess(commands.Cog):
                 color = "branco" if white == ctx.author.id else "preto"
 
                 await channel.send(f"{ctx.author.mention} Você é o {color}")
-                await self.imageboard(ctx, list(brd[alias[ctx.author.id]])[0])
-                logging.info("Nova partida de xadrez criada.")
+                await self.imageboard(ctx, list(brd[alias[ctx.author.id]])[0], match_id=data)
+
+                logging.info("Nova partida de xadrez criada. (ID: %s)", )
         else:
             await ctx.reply('Você já tem uma partida em andamento.')
 
-    async def create_channel(self, ctx, userplayer):
+    async def create_channel(self, ctx, userplayer, *, match_id=None):
+        """
+        Cria o canal de xadrez.
+        """
         # cria o canal do xadrez.
         ov = {
             ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
@@ -198,6 +212,8 @@ class Chess(commands.Cog):
         }
 
         display = "CPU"
+        if match_id is None:
+            match_id = self._create_match_id(ctx.author, userplayer)
         if userplayer is not None and isinstance(userplayer, discord.Member):
             ov[userplayer] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
             display = userplayer.display_name
@@ -205,10 +221,14 @@ class Chess(commands.Cog):
         if category is None:
             category = await ctx.guild.create_category_channel('Xadrez')
         channel = await ctx.guild.create_text_channel(f"xadrez-{ctx.author.display_name}-{display}",
-                    overwrites=ov, topic="cu", category= category)
+                                                      overwrites=ov, topic=f"ID -> {match_id}", category= category)
         return channel
 
-    async def imageboard(self, ctx, tab, move= None):
+    def _create_match_id(self, *competitors) -> str:
+        data = secrets.token_urlsafe(16)
+        return data
+
+    async def imageboard(self, ctx, tab, move=None, match_id=None):
         square = None
         if tab.is_check():
             pieces = tab.pieces(piece_type=chess.KING, color=tab.turn)
@@ -224,41 +244,42 @@ class Chess(commands.Cog):
 
         embed.set_image(url="attachment://outputboard.png")
         embed.set_footer(text="Utilize ,xadrez <coordenada inicial> <coordenada final> para jogar."
-                "\nUtilize `,xadfi` para desistir.")
+                              "\nUtilize `,xadfi` para desistir.")
 
         await channel.send(file = file, embed= embed)
-        if tab.is_game_over() == False:
-             turn = self.turn(ctx)
-             if tab.is_check():
-                 await channel.send('https://cdn.discordapp.com/attachments/597071381586378752/796947748401446952/ezgif-2-9143b9b40c89.gif')
-             await channel.send(f'É a vez de <@{turn}>')
-             if turn == ctx.me.id:
-                async with channel.typing():
-                    while True:
-                        try:
-                            result = self.engine.play(tab, chess.engine.Limit(time=5), options={'Skill Level': list(brd[alias[ctx.author.id]])[3]})
-                            tab.push(result.move)
-                            await self.imageboard(ctx, tab, result.move)
-                            break
-                        except:
-                            continue
+        if tab.is_game_over() is False:
+            turn = self.turn(ctx)
+            if tab.is_check():
+                await channel.send('https://cdn.discordapp.com/attachments/597071381586378752/796947748401446952/ezgif-2-9143b9b40c89.gif')
+        turn = ctx.guild.get_member(turn)
+        await channel.send(f'É a vez de {turn.mention}')
+        if turn == ctx.me.id:
+            async with channel.typing():
+                # 10 tentativas de jogadas.
+                for _ in range(0, 11):
+                    try:
+                        result = self.engine.play(tab, chess.engine.Limit(time=5), options={'Skill Level': list(brd[alias[ctx.author.id]])[3]})
+                        tab.push(result.move)
+                        await self.imageboard(ctx, tab, result.move)
+                        break
+                    except:
+                        continue
         else:
             if tab.is_checkmate():
                 await channel.send("Xeque-mate!")
-
             elif tab.is_stalemate():
                 await ctx.send("Rei afogado!")
             elif tab.is_insufficient_material():
                 await ctx.send("Material insuficiente!")
             if tab.result() == '1-0':
-                await ctx.send(embed= discord.Embed(title=f"Partida finalizada", description= f'<@{list(brd[alias[ctx.author.id]])[1]}> foi o vencedor. Parabéns!').set_image(url='https://img1.recadosonline.com/713/006.gif'))
+                await ctx.send(embed=discord.Embed(title=f"Partida finalizada", description= f'<@{list(brd[alias[ctx.author.id]])[1]}> foi o vencedor. Parabéns!').set_image(url='https://img1.recadosonline.com/713/006.gif'))
             elif tab.result() == '0-1':
-                await ctx.send(embed= discord.Embed(title=f"Partida finalizada", description= f'<@{list(brd[alias[ctx.author.id]])[2]}> foi o vencedor. Parabéns!').set_image(url='https://img1.recadosonline.com/713/006.gif'))
+                await ctx.send(embed=discord.Embed(title=f"Partida finalizada", description= f'<@{list(brd[alias[ctx.author.id]])[2]}> foi o vencedor. Parabéns!').set_image(url='https://img1.recadosonline.com/713/006.gif'))
             elif tab.result() == '1/2-1/2':
-                await ctx.send(embed= discord.Embed(title= 'Temos um empate!', description= 'GG, peguem seus troféus de empate'))
-            await self.end_match(ctx)
+                await ctx.send(embed=discord.Embed(title= 'Temos um empate!', description= 'GG, peguem seus troféus de empate'))
+            await self.end_match(ctx, match_id)
 
-    async def end_match(self, ctx, winner=None):
+    async def end_match(self, ctx, winner=None, *, match_id=None):
         # lógica compartilhada quando uma partida é encerrada.
 
         try:
@@ -271,7 +292,7 @@ class Chess(commands.Cog):
                 winner = ctx.guild.get_member(winner)
             await channel.send(embed= discord.Embed(title=f"Partida finalizada",
                                                     description= f'{winner.mention} foi o vencedor. Parabéns!').set_image(url='https://img1.recadosonline.com/713/006.gif'))
-        self._post_winner(winner)
+        self._post_winner(winner, match_id)
         self._refresh_wins()
         await asyncio.sleep(45)
         await channel.delete()
@@ -296,11 +317,19 @@ class Chess(commands.Cog):
         """
         Realiza uma jogada de xadrez.
         Obviamente você precisa estar em uma partida de xadrez para utilizar esse comando.
+
+        **Argumentos:**
+            \* coord1: a primeira coordenada, é usada para escolher a peça desejada.
+            \* coord2: a segunda coordenada, é o destino da peça localizada na *coord1*.
+
+        **Exemplo:**
+            \* Mover um peão 2 casas pra frente:
+                `,xadrez a2 a4`
         """
         turn = self.turn(ctx)
         brdauth = list(brd[alias[ctx.author.id]])[0]
         try:
-            
+
             if turn == ctx.author.id:
                 Nf3 = chess.Move.from_uci(coord1 + coord2)
                 if Nf3 in brdauth.legal_moves:
@@ -325,15 +354,15 @@ class Chess(commands.Cog):
 
             try:
                 reaction, user = await self.client.wait_for("reaction_add",
-                                                       check=checkreaction,
-                                                       timeout=120)
+                                                            check=checkreaction,
+                                                            timeout=120)
             except asyncio.TimeoutError:
                 pass
             else:
-                    if ctx.author.id == list(brd[alias[ctx.author.id]])[1]:
-                        await self.end_match(ctx, list(brd[alias[ctx.author.id]])[2])
-                    else:
-                        await self.end_match(ctx, list(brd[alias[ctx.author.id]])[1])
+                if ctx.author.id == list(brd[alias[ctx.author.id]])[1]:
+                    await self.end_match(ctx, list(brd[alias[ctx.author.id]])[2])
+                else:
+                    await self.end_match(ctx, list(brd[alias[ctx.author.id]])[1])
 
         except KeyError:
             # por algum motivo esse pedaço de código é executado

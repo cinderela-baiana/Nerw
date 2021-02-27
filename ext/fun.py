@@ -300,17 +300,26 @@ class Misc(commands.Cog):
     async def enviar(self, ctx, user: Union[discord.Member, discord.User], *, msg: str):
         """Envia uma mensagem para a dm da pessoa mencionada.
         é necessário de que a DM dela esteja aberta."""
+        description = """
+        Lembre-se de responder a mensagem enviada usando o novo sistema, conforme o
+        exemplo abaixo.
+        """
+
         files = [await att.to_file() for att in ctx.message.attachments]
-        await user.send(msg, files=files)
-        await user.send(embed=discord.Embed(title="Responda seu amigo (ou inimigo) anônimo!",
-                        description="Para responder use `,responder <mensagem>`",
-                        color=self._get_embed_color(ctx)))
+        respmsg = await user.send(msg, files=files)
+        embed = discord.Embed(title="Responda seu amigo (ou inimigo) anônimo!",
+                        description="Para responder use `,responder <mensagem>`\n" + description,
+                        color=self._get_embed_color(ctx))
+        embed.set_image(url="https://i.ibb.co/sF6pVsn/enviar-example.png")
+        await user.send(embed=embed)
+
         if ctx.guild is not None:
             # não pode apagar mensagens do destinatário na DM
             await ctx.message.delete()
 
-        def check(message):
-            msgcon = message.content.startswith(",responder")
+        def check(message: discord.Message):
+            msgcon = message.content.startswith(",responder") and message.reference is not None \
+                        and message.reference.message_id == respmsg.id
             return message.author.id == user.id and message.guild is None and msgcon
 
         guild = self.client.get_guild(790744527450800139)
@@ -366,6 +375,15 @@ class Misc(commands.Cog):
 
             await w.start(ctx)
             del request
+
+    @commands.command()
+    async def invite(self, ctx):
+        """
+        Recebe um link para convidar o bot para um servidor.
+        """
+        permissions = discord.Permissions(administrator=True)
+        url = discord.utils.oauth_url(self.client.user.id, permissions)
+        await ctx.reply(f"Para convidar o bot para o seu servidor, use este link -> <{url}>.")
 
     def _get_embed_color(self, ctx: commands.Context):
         if isinstance(ctx.me, discord.ClientUser): # estamos em uma DM.
