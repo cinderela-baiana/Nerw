@@ -7,6 +7,12 @@ import emoji
 import os
 import traceback
 import sys
+import psutil
+import humanize
+
+SYSTEM_ROOT = "/"
+
+humanize.i18n.activate("pt_BR")
 
 from dataclass import write_reaction_messages_to_file
 from typing import Optional
@@ -107,6 +113,30 @@ async def on_message_delete(message):
     if snipes_channel is None:
         snipes[message.channel.id] = []
     snipes[message.channel.id].append(message)
+
+@client.event
+async def on_guild_join(guild: discord.Guild):
+    suppg = client.get_guild(790744527450800139)
+    qtnchan = suppg.get_channel(815313065909682178)
+
+    if suppg is None or qtnchan is None:
+        logging.warning("Eu não estou no servidor do bot ou " 
+                        "o canal de voz com os servidores não exite mais!")
+        return
+
+    await qtnchan.edit(name=f"Qtn. de servidores: {len(client.guilds)}")
+
+@client.event
+async def on_guild_remove(guild: discord.Guild):
+    suppg = client.get_guild(790744527450800139)
+    qtnchan = suppg.get_channel(815313065909682178)
+
+    if suppg is None or qtnchan is None:
+        logging.warning("Eu não estou no servidor do bot ou " 
+                        "o canal de voz com os servidores não exite mais!")
+        return
+
+    await qtnchan.edit(name=f"Qtn. de servidores: {len(client.guilds)}")
 
 @client.check
 async def blacklist(ctx):
@@ -255,6 +285,19 @@ async def on_command_error(ctx, error):
 
         await ctx.send(ctx.author.mention, embed=embed)
 
+@client.command(hidden=True)
+@commands.is_owner()
+async def refqtn(ctx):
+    suppg = client.get_guild(790744527450800139)
+    qtnchan = suppg.get_channel(815313065909682178)
+
+    if suppg is None or qtnchan is None:
+        logging.warning("Eu não estou no servidor do bot ou " 
+                        "o canal de voz com os servidores não exite mais!")
+        return
+
+    await qtnchan.edit(name=f"Qtn. de servidores: {len(client.guilds)}")
+    await ctx.message.add_reaction(emoji.emojize(":thumbsup:"))
 
 @client.command()
 @commands.cooldown(1, 20, commands.BucketType.member)
@@ -304,6 +347,33 @@ async def snipe(ctx):
     embed.set_author(name=snipe.author, icon_url=snipe.author.avatar_url)
     if snipe.attachments:
         embed.set_image(url=snipe.attachments[0].proxy_url)
+    await ctx.reply(embed=embed)
+
+@client.command()
+@commands.cooldown(1, 5, commands.BucketType.member)
+async def botinfo(ctx):
+    cpu_percent = psutil.cpu_percent(None, percpu=True)
+    threads = []
+    for thread in range(0, len(cpu_percent)):
+        percent = cpu_percent[thread - 1]
+        threads.append(f"Núcleo {thread + 1}: {percent:.1f}%")
+    threads = "\n".join(threads)
+
+    memory = psutil.virtual_memory()
+
+    natural_used = humanize.filesize.naturalsize(memory.used)
+    natural_free = humanize.filesize.naturalsize(memory.total)
+    memstr = f"{natural_used}/{natural_free}"
+
+    hdd = psutil.disk_usage(SYSTEM_ROOT)
+    hum_hdd_free = humanize.filesize.naturalsize(hdd.used)
+    hum_hdd_busy = humanize.filesize.naturalsize(hdd.total)
+
+    embed = discord.Embed(title="Informações técnicas sobre o bot.")
+    embed.add_field(name="Porcentagem de uso dos núcleos", value=threads, inline=True)
+    embed.add_field(name="Memória RAM", value=memstr, inline=True)
+    embed.add_field(name="Disco Rígido", value=f"{hum_hdd_free} usados de {hum_hdd_busy}")
+    embed.add_field(name="Quantidade de servidores em que o bot está", value=str(len(client.guilds)))
     await ctx.reply(embed=embed)
 
 @client.command(aliases=["mov"])

@@ -8,3 +8,5 @@ git+git://github.com/niklasf/python-chess.git
 git+https://github.com/Rapptz/discord-ext-menus
 CairoSVG
 aiosqlite
+psutil
+humanize
