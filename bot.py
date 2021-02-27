@@ -292,7 +292,6 @@ async def mute_user(ctx, user):
     await user.add_roles(role)
     return role
 
-
 @client.command()
 @commands.cooldown(2, 5, commands.BucketType.channel)
 async def snipe(ctx):
@@ -303,9 +302,9 @@ async def snipe(ctx):
 
     embed = discord.Embed(description=snipe.content, color=snipe.author.color)
     embed.set_author(name=snipe.author, icon_url=snipe.author.avatar_url)
-
+    if snipe.attachments:
+        embed.set_image(url=snipe.attachments[0].proxy_url)
     await ctx.reply(embed=embed)
-
 
 @client.command(aliases=["mov"])
 @commands.has_permissions(manage_messages=True)
