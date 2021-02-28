@@ -34,8 +34,20 @@ class Help(commands.Cog):
         embed.add_field(name="Argumentação", value=f"`{command.name} {command.signature}`", inline=True)
         return embed
 
+    def get_subcommand_help(self, ctx, command: commands.Group):
+        embed = self.get_command_help(ctx, command)
+        cmds = command.commands
+        scheme = []
+
+        for cmd in cmds:
+            scheme.append(f"`,{command.qualified_name} {cmd.name}` -- {cmd.brief}.")
+        embed.add_field(name="Subcomandos", value="\n".join(scheme))
+
+        return embed
+
+
     @commands.command(name="help")
-    async def _help(self, ctx, cmd: Optional[str]):
+    async def _help(self, ctx, *, cmd: Optional[str]):
         """Mostra essa mensagem."""
 
         if isinstance(ctx.me, discord.ClientUser):
@@ -45,11 +57,18 @@ class Help(commands.Cog):
 
         if cmd is None:
             all_commands = " | ".join([command.name for command in self.client.commands])
-            eb = discord.Embed(title="Ajuda", description=all_commands, color=color)
+            eb = discord.Embed(description=all_commands, color=color)
+            permissions = discord.Permissions(administrator=True)
+            url = discord.utils.oauth_url(self.client.user.id, permissions)
+            eb.set_author(name="Me convide para o seu servidor!", url=url)
             await ctx.reply(embed=eb)
         else:
             try:
-                hlp = self.get_command_help(ctx, self.client.get_command(cmd))
+                command = self.client.get_command(cmd)
+                if isinstance(command, commands.Group):
+                    hlp = self.get_subcommand_help(ctx, command)
+                elif isinstance(command, commands.Command):
+                    hlp = self.get_command_help(ctx, command)
             except ValueError:
                 await ctx.reply(f"Não existe nenhum comando com o nome **{cmd}**.")
                 return

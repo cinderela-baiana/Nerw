@@ -318,7 +318,8 @@ class Misc(commands.Cog):
             await ctx.message.delete()
 
         def check(message: discord.Message):
-            msgcon = message.content.startswith(",responder") and message.reference is not None \
+            msgcon = message.content.startswith(",responder") or \
+                message.content.startswith(",report") and message.reference is not None \
                         and message.reference.message_id == respmsg.id
             return message.author.id == user.id and message.guild is None and msgcon
 
@@ -337,6 +338,9 @@ class Misc(commands.Cog):
         except asyncio.TimeoutError:
            return
         else:
+            if message.content.startswith(",report"):
+                await self._handle_report(ctx, user)
+                return
             con = " ".join(message.content.split(" ")[1:])
 
             embed = discord.Embed(
@@ -351,6 +355,10 @@ class Misc(commands.Cog):
                 files = [await att.to_file() for att in message.attachments]
 
             await ctx.author.send(embed=embed, files=files)
+
+    async def _handle_report(self, ctx, user):
+        appinfo = await self.client.application_info()
+
 
     @commands.cooldown(1, 20.0, commands.BucketType.member)
     @commands.command()
