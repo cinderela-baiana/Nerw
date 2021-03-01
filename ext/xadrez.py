@@ -2,7 +2,7 @@
 import chess
 import discord
 import asyncio
-from typing import Optional, Union
+from typing import *
 import random
 import emoji
 import logging
@@ -13,6 +13,7 @@ import secrets
 import os
 import warnings
 import uuid
+import sys
 import collections
 
 from Utils import DatabaseWrap, Field
@@ -27,7 +28,7 @@ channels = {}
 CHESS_TABLE_NAME = "chess_matches"
 CLEAN_CHESS_TABLE = chess.Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
 
-MatchData = collections.namedtuple("MatchData", ("board", "white", "black", "difficulty", "match_id"))
+MatchData = collections.namedtuple("MatchData", ("board", "white", "black", "difficulty", "match_id", "overwrites"))
 
 def _get_executable_suffix():
     import sys
@@ -86,38 +87,45 @@ class Chess(commands.Cog):
          na próxima chamada ao calculate_position."""
         self._wins = None
 
-    def get_current_matches(self):
-        print(brd)
+    def get_current_matches(self) -> List[MatchData]:
+        """
+        Retorna todas as partidas ocorrendo neste momento.
+        """
         return list(brd.values())
 
-    def get_current_matches_ids(self):
+    def get_current_matches_ids(self) -> List[int]:
+        """
+        Pega todos os IDs das partidas ocorrendo neste momento, equivale a um `map` no
+        get_current_matches(), pegando todos os IDs dele.
+        """
         return list(map(lambda match_data : match_data.match_id, self.get_current_matches()))
 
-    def get_match_by_enemy(self, enemy: Union[int, discord.Member]):
+    def get_match_by_enemy(self, enemy: Union[int, discord.Member]) -> Optional[MatchData]:
         if isinstance(enemy, discord.Member):
             enemy = enemy.id
         return brd.get(enemy)
 
-    def get_match_by_creator(self, creator: Union[int, discord.Member]):
+    def get_match_by_creator(self, creator: Union[int, discord.Member]) -> Optional[MatchData]:
         if isinstance(creator, discord.Member):
             creator = creator.id
         enem = alias.get(creator)
         return self.get_match_by_enemy(enem)
 
-    def get_match_by_id(self, match_id : str):
+    def get_match_by_id(self, match_id : str) -> Optional[MatchData]:
         for match_data in self.get_current_matches():
             if match_data.match_id == match_id:
                 return match_data
         else:
             return
 
-    @commands.group(aliases=["xadspec"], enabled=False)
+    @commands.group(aliases=["xadspec"], enabled=True)
     async def xadrez_spectate(self, ctx):
         if ctx.invoked_subcommand is None:
             await ctx.reply("Informe algum subcomando!")
 
     @xadrez_spectate.command(name="join")
     async def xadspec_join(self, ctx, match_code : str):
+        """Começa a espectar uma partida de xadrez."""
         match_data = self.get_match_by_id(match_code)
         if match_data is None:
             return await ctx.reply("Essa partida não existe ou já terminou.")
@@ -131,10 +139,13 @@ class Chess(commands.Cog):
         black, white = ctx.guild.get_member(match_data.black), ctx.guild.get_member(match_data.white)
 
         ov = {
-            ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
             ctx.author: discord.PermissionOverwrite(add_reactions=False, read_messages=True, send_messages=False),
-            ctx.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, embed_links=True)
         }
+
+        if sys.version_info >= (3,9):
+            ov |= match_data.overwrites
+        else:
+            ov.update(match_data.overwrites)
 
         if black is not None:
             ov[black] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
@@ -142,6 +153,7 @@ class Chess(commands.Cog):
             ov[white] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
         await channel.edit(overwrites=ov)
+        await ctx.reply(f"O chat de xadrez é o {channel.mention}")
 
     @xadrez_spectate.command(name="list")
     async def xadspec_list(self, ctx):
@@ -244,8 +256,6 @@ class Chess(commands.Cog):
                         dificuldade = difficultylist[content]
 
                 data = self._create_match_id(ctx.author, userplayer)
-                channel = channels[userplayer.id] = await self.create_channel(ctx, userplayer, match_id=data)
-                await channel.send(f"{mentions} Que os jogos comecem!")
                 rdm = random.randint(1, 2)
 
                 if rdm == 1:
@@ -258,10 +268,12 @@ class Chess(commands.Cog):
                 alias[ctx.author.id] = userplayer.id
                 alias[userplayer.id] = userplayer.id
                 brd[userplayer.id] = MatchData(board=CLEAN_CHESS_TABLE, white=white,
-                                               black=black, difficulty=dificuldade, match_id=data)
+                                               black=black, difficulty=dificuldade, match_id=data, overwrites=None)
 
+                channel = channels[userplayer.id] = await self.create_channel(ctx, userplayer, match_id=data)
                 color = "branco" if white == ctx.author.id else "preto"
 
+                await channel.send(f"{mentions} Que os jogos comecem!")
                 await channel.send(f"{ctx.author.mention} Você é o {color}")
                 await self.imageboard(ctx, brd[alias[ctx.author.id]].board)
 
@@ -291,6 +303,8 @@ class Chess(commands.Cog):
             category = await ctx.guild.create_category_channel('Xadrez')
         channel = await ctx.guild.create_text_channel(f"xadrez-{ctx.author.display_name}-{display}",
                                                       overwrites=ov, topic=f"ID -> {match_id}", category=category)
+        match = self.get_match_by_id(match_id)
+        brd[alias[ctx.author.id]] = match._replace(overwrites=ov)
         return channel
 
     def _create_match_id(self, *competitors) -> str:
@@ -376,7 +390,7 @@ class Chess(commands.Cog):
                 except ValueError:
                     winner = ctx.guild.get_member_named(winner)
                 else:
-                    winner = ctx.guild.get_member()
+                    winner = ctx.guild.get_member(winner)
             embed = discord.Embed(title=f"Partida finalizada",
                                                     description= f'{winner.mention} foi o vencedor. Parabéns!')
             embed.set_image(url='https://img1.recadosonline.com/713/006.gif')
@@ -385,16 +399,16 @@ class Chess(commands.Cog):
             brdobj = brd[alias[ctx.author.id]]
             self._post_winner(winner, brdobj.match_id)
 
-        self._refresh_wins()
-        await asyncio.sleep(45)
-        await channel.delete()
-
         user1 = brd[alias[ctx.author.id]].white
         user2 = brd[alias[ctx.author.id]].black
         del brd[alias[ctx.author.id]]
         del alias[user1]
         del alias[user2]
         del channels[alias[ctx.author.id]]
+
+        self._refresh_wins()
+        await asyncio.sleep(45)
+        await channel.delete()
 
     def turn(self, ctx):
         brdauth = brd[alias[ctx.author.id]].board
@@ -405,6 +419,7 @@ class Chess(commands.Cog):
         return turn
 
     @commands.command(aliases=["xad"])
+    @commands.guild_only()
     async def xadrez(self, ctx, coord1, coord2):
         """
         Realiza uma jogada de xadrez.
@@ -418,8 +433,12 @@ class Chess(commands.Cog):
             \* Mover um peão 2 casas pra frente:
                 `,xadrez a2 a4`
         """
-        turn = self.turn(ctx)
-        board = brd[alias[ctx.author.id]]
+        try:
+            turn = self.turn(ctx)
+        except KeyError:
+            return await ctx.reply("Você não está em uma partida de xadrez.")
+
+        board = self.get_match_by_creator(ctx.author)
         brdauth = board.board
         try:
             if turn == ctx.author.id:

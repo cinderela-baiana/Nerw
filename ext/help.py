@@ -40,7 +40,8 @@ class Help(commands.Cog):
         scheme = []
 
         for cmd in cmds:
-            scheme.append(f"`,{command.qualified_name} {cmd.name}` -- {cmd.brief}.")
+            brief = "Nenhuma ajuda disponível" if cmd.brief is None else cmd.brief
+            scheme.append(f"`,{command.qualified_name} {cmd.name}` -- {brief}.")
         embed.add_field(name="Subcomandos", value="\n".join(scheme))
 
         return embed
@@ -57,10 +58,12 @@ class Help(commands.Cog):
 
         if cmd is None:
             all_commands = " | ".join([command.name for command in self.client.commands])
+
             eb = discord.Embed(description=all_commands, color=color)
             permissions = discord.Permissions(administrator=True)
             url = discord.utils.oauth_url(self.client.user.id, permissions)
             eb.set_author(name="Me convide para o seu servidor!", url=url)
+
             await ctx.reply(embed=eb)
         else:
             try:

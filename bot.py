@@ -245,7 +245,6 @@ async def on_command_error(ctx, error):
 
         if hasattr(error, "code"):  # discord.Forbbiden
             embed.set_footer(text=f"Código do erro: **{error.code}**")
-
         elif hasattr(error, "missing_perms"):  # commands.BotMissingPermissions
             missing = ", ".join(error.missing_perms)
             embed.set_footer(text=f"Permissões faltando: **{missing}**")
@@ -254,11 +253,10 @@ async def on_command_error(ctx, error):
 
     elif isinstance(error, commands.MissingRequiredArgument):
         command = client.get_command("help")
-
-        await ctx.invoke(command, ctx.command.name)
+        await ctx.invoke(command, cmd=ctx.command.name)
 
     elif isinstance(error, commands.DisabledCommand):
-        await ctx.reply("O comando está desabilitado.")
+        await ctx.reply(f"Desculpe, mas o comando **{ctx.command.qualified_name}** está temporariamente desabilitado.")
 
     elif isinstance(error, commands.MissingPermissions):
         missing = ", ".join(error.missing_perms)

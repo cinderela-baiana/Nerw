@@ -42,6 +42,7 @@ class ChatterThread(threading.Thread):
         self._queue = queue.Queue(10)
         self._event = threading.Event()
         self._lock = threading.Lock()
+        self._train_error = None
 
     @property
     def chat(self):
@@ -55,6 +56,10 @@ class ChatterThread(threading.Thread):
     @chat.setter
     def chat_setter(self, _):
         raise AttributeError("A propriedade 'chat' é apenas para leitura.")
+
+    @property
+    def train_exception(self):
+        return self._train_error
 
     @property
     def available(self):
@@ -81,8 +86,9 @@ class ChatterThread(threading.Thread):
 
                 trainer.train("chatterbot.corpus.portuguese")
                 self.trained = True
-        except Exception:
+        except Exception as err:
             logger.critical("Houve um erro durante o treinamento do bot!", exc_info=True)
+            self.train_exception = err
             self._usable = False
             return
         else:
