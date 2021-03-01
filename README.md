@@ -5,6 +5,7 @@ O bot precisa de pelo menos o [Python 3.8](https://www.python.org/downloads/rele
 
 1. Clone o repositório (`git clone https://github.com/joao-0213/BotGamera/`);
 1. Instale as dependências do bot em si (Windows: `pip install -r requirements.txt`, UNIX: `pip3.8 install -r requirements.txt`);
+1. Baixe o [Stockfish](https://stockfishchess.org/download/), renomeie o executável para `stockfish` (Usuários de Windows: Lembre-se de deixar o sufixo `.exe`!) e mova até a pasta `config`.
 
 ### Passos específicos para UNIX
 1. Instale o pacote do [Cairo](https://www.cairographics.org/).
