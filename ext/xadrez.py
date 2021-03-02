@@ -18,7 +18,7 @@ import collections
 
 from Utils import DatabaseWrap, Field
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 brd = {}
 alias = {}
@@ -40,7 +40,7 @@ def _get_executable_suffix():
 class Chess(commands.Cog):
 
     def __init__(self, client):
-        logging.info("Carregando engine do xadrez")
+        logger.info("Carregando engine do xadrez")
         self.client = client
         file = "config/stockfish" + _get_executable_suffix()
         if not os.path.exists(file):
@@ -49,7 +49,7 @@ class Chess(commands.Cog):
                           stacklevel=2)
         self._wins = None
         self.engine = chess.engine.SimpleEngine.popen_uci(file)
-        logging.info("engine do xadrez carregada!")
+        logger.info("engine do xadrez carregada!")
 
     def _create_table(self):
         """
@@ -277,7 +277,7 @@ class Chess(commands.Cog):
                 await channel.send(f"{ctx.author.mention} Você é o {color}")
                 await self.imageboard(ctx, brd[alias[ctx.author.id]].board)
 
-                logging.info("Nova partida de xadrez criada.")
+                logger.info("Nova partida de xadrez criada. (ID -> %s)", data)
         else:
             await ctx.reply('Você já tem uma partida em andamento.')
 
@@ -376,12 +376,14 @@ class Chess(commands.Cog):
     async def end_match(self, ctx, winner=None):
         # lógica compartilhada quando uma partida é encerrada.
 
+        brdobj = self.get_match_by_creator(ctx.author.id)
+
         try:
             channel = channels[alias[ctx.author.id]]
         except KeyError:
-            logging.warning("Não foi possível pegar o canal onde a partida aconteceu.")
+            logger.warning("Não foi possível pegar o canal onde a partida %s aconteceu.", brdobj.match_id)
             return
-        if winner != None:
+        if winner is not None:
             if isinstance(winner, int):
                 winner = ctx.guild.get_member(winner)
             elif isinstance(winner, str):
@@ -391,12 +393,12 @@ class Chess(commands.Cog):
                     winner = ctx.guild.get_member_named(winner)
                 else:
                     winner = ctx.guild.get_member(winner)
+
             embed = discord.Embed(title=f"Partida finalizada",
                                                     description= f'{winner.mention} foi o vencedor. Parabéns!')
             embed.set_image(url='https://img1.recadosonline.com/713/006.gif')
             await channel.send(embed=embed)
-
-            brdobj = brd[alias[ctx.author.id]]
+            logger.info("Partida %s finalizada. (Vencedor: %s)", brdobj.match_id, str(winner))
             self._post_winner(winner, brdobj.match_id)
 
         user1 = brd[alias[ctx.author.id]].white

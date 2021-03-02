@@ -1,9 +1,10 @@
 from discord.ext import commands
 from Utils import Field, create_async_database
-from dataclass import write_blacklist
+from dataclass import write_blacklist, write_reaction_messages_to_file
 from typing import Union, Optional
 
 import discord
+
 
 class Moderation(commands.Cog):
     def __init__(self, client):
@@ -34,7 +35,7 @@ class Moderation(commands.Cog):
         await ctx.channel.send(embed=embed)
         await ctx.message.delete()
 
-    @commands.command()
+    @commands.command(hidden=True)
     @commands.is_owner()
     async def blacklist(self, ctx, user: Union[discord.Member, discord.User], *, reason: str = None):
         """Deixa uma pessoa na lista negra.
@@ -57,7 +58,7 @@ class Moderation(commands.Cog):
         write_blacklist(user, reason)
         await ctx.reply(f"O usuário {user} foi banido de usar o bot.")
 
-    @commands.command()
+    @commands.command(hidden=True)
     @commands.is_owner()
     async def whitelist(self, ctx, user: Union[discord.Member, discord.User]):
         """
@@ -108,6 +109,68 @@ class Moderation(commands.Cog):
         await member.kick(reason=f"{reason}; Ação efetuada por {ctx.author}")
         await ctx.channel.send(embed=embed)
         await ctx.message.delete()
+
+    @commands.command(aliases=["mov"])
+    @commands.has_permissions(manage_messages=True)
+    async def mover_mensagem(self, ctx, message: discord.Message, canal: discord.TextChannel, *, motivo=None):
+        if motivo is None:
+            motivo = 'Não especificado'
+
+        hook = await canal.create_webhook(name="Gamera Bot")
+        files = None
+        if message.attachments:
+            files = [await att.to_file() for att in message.attachments]
+        await canal.send(content=f'{message.author.mention}', embed=discord.Embed(title=f'Mensagem movida!',
+                                                    description=f'Sua mensagem foi movida para cá.\n'
+                                                    f'Motivo: {motivo}'),
+                                                    delete_after=20)
+        content = message.content
+        if message.reference is not None and \
+                not isinstance(message.reference, discord.DeletedReferencedMessage):
+            # respondeu a alguém usando o novo sistema e
+            # a mensagem referenciada não foi apagada
+
+            rmessage = await ctx.channel.fetch_message(message.reference.message_id)
+
+            files = []
+            for attch in message.attachments:
+                files.append(await attch.to_file())
+
+            wmessage = await hook.send(username=rmessage.author.display_name,
+                            avatar_url=rmessage.author.avatar_url,
+                            content=rmessage.content,
+                            files=files,
+                            wait=True)
+
+            content = f"> {wmessage.content}\n{rmessage.author.mention} {message.content}"
+
+        await hook.send(content=content, files=files, username=message.author.name,
+                        avatar_url=message.author.avatar_url)
+
+        await message.delete()
+        await ctx.message.delete()
+        await hook.delete()
+
+    @commands.command()
+    @commands.has_guild_permissions(manage_channels=True)
+    async def reaction_activate(self, ctx, channel: Optional[discord.TextChannel],
+                                msg: str,
+                                emoji: discord.Emoji,
+                                role: discord.Role):
+        """Sisteminha básico de reaction roles, atualmente suporta apenas 1 reação por mensagem."""
+        message = await channel.send(msg)
+        try:
+            await message.add_reaction(emoji)
+        except discord.InvalidArgument:
+            await channel.send("Me desculpe, aparentemente há algo de errado com o seu emoji :sad:")
+        except discord.NotFound:
+            await channel.send("Emoji não encontrado")
+        except discord.HTTPException:
+            await channel.send("Algo deu errado:(")
+        else:
+            write_reaction_messages_to_file(channel.id, message.id, emoji.id, role.id)
+            await channel.send("Mensagem reagida com sucesso!")
+
 
 def setup(client):
     client.add_cog(Moderation(client))

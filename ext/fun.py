@@ -10,6 +10,7 @@ import random
 import io
 import datetime
 import aiohttp
+
 apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
 tempourl = "https://api.openweathermap.org/data/2.5/onecall?"
 geolocator = Nominatim(user_agent='joaovictor.lg020@gmail.com')
@@ -189,59 +190,40 @@ class Fun(commands.Cog):
             await asyncio.sleep(5)
             await ctx.guild.unban(memb, reason="Tinha sido banido pelo ,banrandom")
 
-    def get_colors(self, image, colors=10, resize=150):
-        if isinstance(image, bytes):
-            image = io.BytesIO(image)
-        image = Image.open(image)
-
-        image = image.copy()
-        image.thumbnail((resize, resize))
-
-        palt = image.convert("P", palette=Image.ADAPTIVE, colors=colors)
-        palette = palt.getpalette()
-        color_counts = sorted(palt.getcolors(), reverse=True)
-        colors = []
-
-        for c in range(len(colors) + 1):
-            palette_index = color_counts[c][1]
-            dominant_color = palette[palette_index*3:palette_index*3+3]
-
-            colors.append(tuple(dominant_color))
-
-        return colors
-
-    def save_palette(self, colors, swatchsize=20, outfile="palette.png"):
-        num_colors = len(colors)
-        palette = Image.new('RGB', (swatchsize*num_colors, swatchsize))
-        draw = ImageDraw.Draw(palette)
-
-        posx = 0
-        for color in colors:
-            draw.rectangle([posx, 0, posx+swatchsize, swatchsize], fill=color) 
-            posx = posx + swatchsize
-
-        del draw
-        palette.save(outfile, "PNG")
-
     @commands.command()
-    @commands.cooldown(1, 15, commands.BucketType.member)
-    async def domin(self, ctx, member: Optional[discord.Member]):
-        """
-        Pega a cor dominante do seu avatar ou do membro *member*.
+    @commands.cooldown(1, 20, commands.BucketType.member)
+    async def selfmute(self, ctx, seconds: int):
+        message = await ctx.send("Você quando usar esse comando, fique ciente de que será mutado."
+                                 "\n\nNão vá na DM de nenhum Ajudante/Moderador reclamar de que não sabia que iria ser.")
 
-        As vezes a cor retornada, pode parecer não ser precisa, mas é basicamente
-        a cor com a maior quantidade de pixels coloridos com aquela cor, então
-        pode variar com o tamanho da imagem.
-        """
-        avatar = (member or ctx.author).avatar_url
+        await message.add_reaction("👍")
+        await message.add_reaction("👎")
 
-        colors = self.get_colors(await avatar.read())
-        self.save_palette(colors)
+        def check(reaction, user):
+            return reaction.message.id == message.id and user == ctx.author and reaction.emoji in ("👍", "👎")
 
-        with open("palette.png", "rb") as fp:
-            file = discord.File(fp, "palette.png")
+        try:
+            reaction, user = await self.client.wait_for("reaction_add", check=check, timeout=60.0)
+        except asyncio.TimeoutError:
+            return
+        else:
+            if reaction.emoji == "👍":
+                role = await self.mute_user(ctx, ctx.author)
 
-        await ctx.reply(file=file)
+                await ctx.reply(":ok_hand:")
+                await asyncio.sleep(seconds)
+                await ctx.author.remove_roles(role)
+            else:
+                await ctx.reply("Comando cancelado.")
+
+    async def mute_user(self, ctx, user):
+        role = discord.utils.find(lambda item: item.name == "Muted", ctx.guild.roles)
+
+        if role is None:
+            role = await ctx.guild.create_role(name="Muted", permissions=discord.Permissions(send_messages=False))
+
+        await user.add_roles(role)
+        return role
 
     @commands.command(name="kickrandom", aliases=["kickr"])
     @commands.has_guild_permissions(kick_members=True)

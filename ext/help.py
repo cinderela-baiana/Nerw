@@ -7,7 +7,6 @@ import discord
 class Help(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
-
     def get_command_help(self, ctx, command):
         if command is None:
             raise ValueError
@@ -19,8 +18,8 @@ class Help(commands.Cog):
 
         aliases_copy = deepcopy(command.aliases)
         embed = discord.Embed(title=command.name,
-                description=command.usage,
-                color=color)
+                              description=command.usage,
+                              color=color)
         try:
             aliases_copy.remove(ctx.invoked_with)
         except ValueError:
@@ -57,11 +56,13 @@ class Help(commands.Cog):
             color = ctx.me.color
 
         if cmd is None:
-            all_commands = " | ".join([command.name for command in self.client.commands])
+            filt = filter(lambda command : not command.hidden, self.client.commands)
+            cmds = list(map(lambda command : f"`{command.name}`", filt))
+            all_commands = " | ".join(cmds)
 
-            eb = discord.Embed(description=all_commands, color=color)
             permissions = discord.Permissions(administrator=True)
             url = discord.utils.oauth_url(self.client.user.id, permissions)
+            eb = discord.Embed(description=all_commands, color=color)
             eb.set_author(name="Me convide para o seu servidor!", url=url)
 
             await ctx.reply(embed=eb)

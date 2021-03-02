@@ -10,17 +10,16 @@ import sys
 import psutil
 import humanize
 
-SYSTEM_ROOT = "/"
-
-humanize.i18n.activate("pt_BR")
-
-from dataclass import write_reaction_messages_to_file
 from typing import Optional
 from itertools import cycle
 from Utils import Field, create_async_database
 from chatter_thread import ChatterThread
 from errors import UserBlacklisted
 from discord.ext import commands, tasks
+from platform import platform
+
+SYSTEM_ROOT = "/"
+humanize.i18n.activate("pt_BR")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -72,8 +71,15 @@ load_all_extensions()
 @tasks.loop(minutes=5)
 async def presence_setter():
     payload = next(activities)
-    activity = discord.Activity(type=payload.get("type", 0), name=payload["name"])
-    await client.change_presence(activity=activity, status=payload.get("status", "online"))
+    status = payload.get("status", "online")
+    ack_type = payload.get("type", 0)
+    name = payload["name"]
+    if client.activity is not None:
+        if client.activity.name == name:
+            return
+
+    activity = discord.Activity(type=ack_type, name=name)
+    await client.change_presence(activity=activity, status=status)
 
 @tasks.loop(minutes=2)
 async def remove_snipes():
@@ -297,49 +303,17 @@ async def refqtn(ctx):
     await qtnchan.edit(name=f"Qtn. de servidores: {len(client.guilds)}")
     await ctx.message.add_reaction(emoji.emojize(":thumbsup:"))
 
-@client.command()
-@commands.cooldown(1, 20, commands.BucketType.member)
-async def selfmute(ctx, seconds: int):
-    message = await ctx.send("Você quando usar esse comando, fique ciente de que será mutado."
-                             "\n\nNão vá na DM de nenhum Ajudante/Moderador reclamar de que não sabia que iria ser.")
-
-    await message.add_reaction("👍")
-    await message.add_reaction("👎")
-
-    def check(reaction, user):
-        return reaction.message.id == message.id and user == ctx.author and reaction.emoji in ("👍", "👎")
-
-    try:
-        reaction, user = await client.wait_for("reaction_add", check=check, timeout=60.0)
-    except asyncio.TimeoutError:
-        return
-    else:
-        if reaction.emoji == "👍":
-            role = await mute_user(ctx, ctx.author)
-
-            await ctx.reply(":ok_hand:")
-            await asyncio.sleep(seconds)
-            await ctx.author.remove_roles(role)
-        else:
-            await ctx.reply("Comando cancelado.")
-
-
-async def mute_user(ctx, user):
-    role = discord.utils.find(lambda item: item.name == "Muted", ctx.guild.roles)
-
-    if role is None:
-        role = await ctx.guild.create_role(name="Muted", permissions=discord.Permissions(send_messages=False))
-
-    await user.add_roles(role)
-    return role
 
 @client.command()
 @commands.cooldown(2, 5, commands.BucketType.channel)
 async def snipe(ctx):
     snipe_arr = snipes.get(ctx.channel.id)
     if snipe_arr is None:
-        return await ctx.send("Não existe nenhum snipe.")
-    snipe = snipe_arr[len(snipe_arr) - 1]
+        return await ctx.reply("Não existe nenhum snipe.")
+    try:
+        snipe = snipe_arr[len(snipe_arr) - 1]
+    except IndexError:
+        return await ctx.reply("Não existe nenhum snipe.")
 
     embed = discord.Embed(description=snipe.content, color=snipe.author.color)
     embed.set_author(name=snipe.author, icon_url=snipe.author.avatar_url)
@@ -374,48 +348,6 @@ async def botinfo(ctx):
     embed.add_field(name="Quantidade de servidores em que o bot está", value=str(len(client.guilds)))
     await ctx.reply(embed=embed)
 
-@client.command(aliases=["mov"])
-@commands.has_permissions(manage_messages=True)
-async def mover_mensagem(ctx, message: discord.Message, canal: discord.TextChannel, *, motivo=None):
-    if motivo is None:
-        motivo = 'Não especificado'
-
-    hook = await canal.create_webhook(name="Gamera Bot")
-    files = None
-    if message.attachments:
-        files = [await att.to_file() for att in message.attachments]
-    await canal.send(content=f'{message.author.mention}', embed=discord.Embed(title=f'Mensagem movida!',
-                                                description=f'Sua mensagem foi movida para cá.\n'
-                                                f'Motivo: {motivo}'),
-                                                delete_after=20)
-    content = message.content
-    if message.reference is not None and \
-            not isinstance(message.reference, discord.DeletedReferencedMessage):
-        # respondeu a alguém usando o novo sistema e
-        # a mensagem referenciada não foi apagada
-
-        rmessage = await ctx.channel.fetch_message(message.reference.message_id)
-
-        files = []
-        for attch in message.attachments:
-            files.append(await attch.to_file())
-
-        wmessage = await hook.send(username=rmessage.author.display_name,
-                        avatar_url=rmessage.author.avatar_url,
-                        content=rmessage.content,
-                        files=files,
-                        wait=True)
-
-        content = f"> {wmessage.content}\n{rmessage.author.mention} {message.content}"
-
-    await hook.send(content=content, files=files, username=message.author.name,
-                    avatar_url=message.author.avatar_url)
-
-    await message.delete()
-    await ctx.message.delete()
-    await hook.delete()
-
-
 @client.command()
 @commands.is_owner()
 async def exit(ctx):
@@ -442,13 +374,11 @@ async def exit(ctx):
             await ctx.send("Ok :cry:")
             await quit_bot(client)
 
-
 @client.command()
 async def ping(ctx):
     """Verifica seu ping."""
     await ctx.reply(
         'Pong! latência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency * 1000, 1)))
-
 
 @client.command(aliases=["channel", "sc"])
 @commands.has_permissions(manage_channels=True)
@@ -473,27 +403,6 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
             color=0xff0000))
 
 @client.command()
-@commands.has_guild_permissions(manage_channels=True)
-async def reaction_activate(ctx, channel: Optional[discord.TextChannel],
-                            msg: str,
-                            emoji: discord.Emoji,
-                            role: discord.Role):
-    """Sisteminha básico de reaction roles, atualmente suporta apenas 1 reação por mensagem."""
-    message = await channel.send(msg)
-    try:
-        await message.add_reaction(emoji)
-    except discord.InvalidArgument:
-        await channel.send("Me desculpe, aparentemente há algo de errado com o seu emoji :sad:")
-    except discord.NotFound:
-        await channel.send("Emoji não encontrado")
-    except discord.HTTPException:
-        await channel.send("Algo deu errado:(")
-    else:
-        write_reaction_messages_to_file(channel.id, message.id, emoji.id, role.id)
-        await channel.send("Mensagem reagida com sucesso!")
-
-
-@client.command()
 @commands.is_owner()
 async def lex(ctx, *, extension: str):
     """Carrega uma extensão."""
@@ -511,7 +420,6 @@ async def lex(ctx, *, extension: str):
         return
     await ctx.reply("Extensão carregada :+1:")
 
-
 @client.command()
 @commands.is_owner()
 async def unlex(ctx, *, extension: str):
@@ -521,6 +429,17 @@ async def unlex(ctx, *, extension: str):
         await ctx.reply(f"A extensão `{ex.name}` não foi carregada ou não existe.")
         return
     await ctx.reply("Extensão descarregada :+1:")
+
+@client.command(aliases=["relax"])
+@commands.is_owner()
+async def relex(ctx, extension: str):
+    """Recarrega uma extensão."""
+    try:
+        client.reload_extension(f"ext.{extension}")
+    except commands.ExtensionNotLoaded as ex:
+        await ctx.reply(f"A extensão `{ex.name}` não foi carregada ou não existe.")
+        return
+    await ctx.reply("Extensão recarregada :+1:")
 
 token = credentials.get("CANARY_TOKEN") if is_canary() else credentials.get("TOKEN")
 client.run(token)
