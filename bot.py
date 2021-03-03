@@ -75,9 +75,6 @@ async def wait_until_weekday():
     sy = next(says)
 
     now = datetime.datetime.now()
-    if now.weekday() > sy["weekday"]:
-        
-
     if isinstance(sy["weekday"], list):
         condition = now.weekday() in sy["weekday"]
     else:
