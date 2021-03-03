@@ -28,7 +28,62 @@ channels = {}
 CHESS_TABLE_NAME = "chess_matches"
 CLEAN_CHESS_TABLE = chess.Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
 
-MatchData = collections.namedtuple("MatchData", ("board", "white", "black", "difficulty", "match_id", "overwrites"))
+_Py_BaseMatchData = collections.namedtuple("MatchData",
+                                           ("board", "white", "black",
+                                            "difficulty", "match_id",
+                                            "overwrites", "spectators"))
+class MatchData(_Py_BaseMatchData):
+    overwrites: dict
+    board: chess.Board
+    white: int
+    black: int
+    spectators: Set[int]
+    match_id: str
+
+    def update_overwrites(self, **new_ovs):
+        self.overwrites.update(**new_ovs)
+        return self.overwrites
+
+    def set_overwrites(self, new_overwrite: dict):
+        self.overwrites = new_overwrite
+
+    def add_spectator(self, spectator):
+        if isinstance(spectator, discord.Member):
+            spectator = spectator.id
+        self.spectators.add(spectator)
+
+    @property
+    def channel(self) -> discord.TextChannel:
+        try:
+            chan = channels[alias[self.white]]
+        except KeyError:
+            chan = channels[alias[self.black]]
+        return chan
+
+    @channel.setter
+    def chanset(self, _):
+        raise AttributeError("channel is read-only")
+
+    async def remove_spectator(self, spectator):
+        if spectator in self.overwrites.keys():
+            self.overwrites.pop(spectator)
+        await self.channel.edit(overwrites=self.overwrites)
+
+        if isinstance(spectator, discord.Member):
+            spectator = spectator.id
+        self.spectators.remove(spectator)
+
+    async def remove_spectators(self, *spectators):
+        for spectator in spectators:
+            if spectator in self.overwrites.keys():
+                self.overwrites.pop(spectator)
+            try:
+                self.spectators.remove(spectator)
+            except KeyError:
+                continue
+
+        await self.channel.edit(overwrites=self.overwrites)
+
 
 def _get_executable_suffix():
     import sys
@@ -93,7 +148,7 @@ class Chess(commands.Cog):
         """
         return list(brd.values())
 
-    def get_current_matches_ids(self) -> List[int]:
+    def get_current_matches_ids(self) -> List[str]:
         """
         Pega todos os IDs das partidas ocorrendo neste momento, equivale a um `map` no
         get_current_matches(), pegando todos os IDs dele.
@@ -118,19 +173,41 @@ class Chess(commands.Cog):
         else:
             return
 
-    @commands.group(aliases=["xadspec"], enabled=True)
-    async def xadrez_spectate(self, ctx):
-        if ctx.invoked_subcommand is None:
-            await ctx.reply("Informe algum subcomando!")
+    @commands.group(aliases=["xadspec", "xadrez_spectate"], enabled=True)
+    async def xadrez_espectar(self, ctx, match_id : str=None):
+        """
+        Grupo de comandos que cuida da parte de espectação de partidas
 
-    @xadrez_spectate.command(name="join")
+        Caso nenhum subcomando seja chamado, você precisa fornecer a ID
+        da partida.
+
+        Exemplo:
+            \* **Entrar em uma partida**
+
+                `,xadspec Uy_su72-wed44`.
+        """
+        if ctx.invoked_subcommand is None and match_id is None:
+            command = self.client.get_command("help")
+            await ctx.invoke(command, cmd="xadspec")
+        elif match_id is not None and ctx.invoked_subcommand is None:
+            await self.xadspec_join(ctx, match_id)
+
+    @xadrez_espectar.command()
+    async def join(self, ctx, match_id : str):
+        emoji = self.client.get_emoji(816429295102328903)
+        await ctx.reply(f"{emoji} Você quis dizer: `,xadspec {match_id}`, né?")
+
     async def xadspec_join(self, ctx, match_code : str):
         """Começa a espectar uma partida de xadrez."""
         match_data = self.get_match_by_id(match_code)
+
         if match_data is None:
             return await ctx.reply("Essa partida não existe ou já terminou.")
+        if ctx.author.id in match_data.spectators:
+            return await ctx.reply("Você já está espectando essa partida.")
 
-        # legal é que não estamos fazendo nenhuma verificação pra caso um dos jogadores saia do servidor.
+        # legal é que não estamos fazendo nenhuma verificação
+        # pra caso um dos jogadores saia do servidor.
         try:
             channel = channels[alias[match_data.white]]
         except KeyError:
@@ -139,7 +216,7 @@ class Chess(commands.Cog):
         black, white = ctx.guild.get_member(match_data.black), ctx.guild.get_member(match_data.white)
 
         ov = {
-            ctx.author: discord.PermissionOverwrite(add_reactions=False, read_messages=True, send_messages=False),
+            ctx.author: discord.PermissionOverwrite(add_reactions=True, read_messages=True, send_messages=False),
         }
 
         if sys.version_info >= (3,9):
@@ -152,16 +229,22 @@ class Chess(commands.Cog):
         if white is not None:
             ov[white] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
+        match_data.set_overwrites(ov)
         await channel.edit(overwrites=ov)
+        match_data.add_spectator(ctx.author)
         await ctx.reply(f"O chat de xadrez é o {channel.mention}")
 
-    @xadrez_spectate.command(name="list")
+    @xadrez_espectar.command(name="list")
     async def xadspec_list(self, ctx):
+        """
+        Lista todas as partidas de xadrez disponíveis para serem espectadas.
+        """
         scheme = []
         for match in self.get_current_matches():
             blackuser = ctx.guild.get_member(match.black)
             whiteuser = ctx.guild.get_member(match.white)
             scheme.append(f"{match.match_id} - {blackuser} vs. {whiteuser}")
+
         await ctx.reply(embed=discord.Embed(title="Partidas disponíveis",
                                             description="\n".join(scheme),
                                             color=discord.Color.orange()))
@@ -265,16 +348,22 @@ class Chess(commands.Cog):
                     white = userplayer.id
                     black = ctx.author.id
 
-                alias[ctx.author.id] = userplayer.id
+                alias[ctx.author.id] = ctx.author.id # compatibilidade
                 alias[userplayer.id] = userplayer.id
-                brd[userplayer.id] = MatchData(board=CLEAN_CHESS_TABLE, white=white,
-                                               black=black, difficulty=dificuldade, match_id=data, overwrites=None)
+                brd[ctx.author.id] = MatchData(board=CLEAN_CHESS_TABLE, white=white,
+                                               black=black, difficulty=dificuldade,
+                                               match_id=data, overwrites=None, spectators=set())
 
-                channel = channels[userplayer.id] = await self.create_channel(ctx, userplayer, match_id=data)
-                color = "branco" if white == ctx.author.id else "preto"
+                channel = await self.create_channel(ctx, userplayer, match_id=data)
+                board : chess.Board= brd[ctx.author.id].board
+
+                if board.turn == chess.WHITE:
+                    color = "branco"
+                elif board.turn == chess.BLACK:
+                    color = "preto"
 
                 await channel.send(f"{mentions} Que os jogos comecem!")
-                await channel.send(f"{ctx.author.mention} Você é o {color}")
+                await channel.send(f"Você ({ctx.author}) é o {color}")
                 await self.imageboard(ctx, brd[alias[ctx.author.id]].board)
 
                 logger.info("Nova partida de xadrez criada. (ID -> %s)", data)
@@ -303,6 +392,7 @@ class Chess(commands.Cog):
             category = await ctx.guild.create_category_channel('Xadrez')
         channel = await ctx.guild.create_text_channel(f"xadrez-{ctx.author.display_name}-{display}",
                                                       overwrites=ov, topic=f"ID -> {match_id}", category=category)
+        channels[alias[ctx.author.id]] = channel
         match = self.get_match_by_id(match_id)
         brd[alias[ctx.author.id]] = match._replace(overwrites=ov)
         return channel
@@ -409,6 +499,7 @@ class Chess(commands.Cog):
         del channels[alias[ctx.author.id]]
 
         self._refresh_wins()
+        await brdobj.remove_spectators(*brdobj.spectators)
         await asyncio.sleep(45)
         await channel.delete()
 
