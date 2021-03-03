@@ -44,7 +44,6 @@ with open('config/credentials.yaml') as t:
 try:
     with open("assets/says.json", encoding="utf-8") as js:
         says = cycle(json.load(js))
-    sy = next(says)
     can_use_says = True
 except FileNotFoundError:
     can_use_says = False
@@ -73,11 +72,11 @@ def load_all_extensions(*, folder=None):
         client.load_extension(r)
 
 async def wait_until_weekday():
-    global sy
+    sy = next(says)
 
     now = datetime.datetime.now()
     if now.weekday() > sy["weekday"]:
-        sy = next(says)
+        
 
     if isinstance(sy["weekday"], list):
         condition = now.weekday() in sy["weekday"]
