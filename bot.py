@@ -9,6 +9,7 @@ import traceback
 import sys
 import psutil
 import humanize
+import datetime
 
 from typing import Optional
 from itertools import cycle
@@ -16,7 +17,6 @@ from Utils import Field, create_async_database
 from chatter_thread import ChatterThread
 from errors import UserBlacklisted
 from discord.ext import commands, tasks
-from platform import platform
 
 SYSTEM_ROOT = "/"
 humanize.i18n.activate("pt_BR")
@@ -41,6 +41,13 @@ with open("config/activities.json") as fp:
     activities = cycle(json.load(fp))
 with open('config/credentials.yaml') as t:
     credentials = yaml.load(t)
+try:
+    with open("assets/says.json", encoding="utf-8") as js:
+        says = cycle(json.load(js))
+    sy = next(says)
+    can_use_says = True
+except FileNotFoundError:
+    can_use_says = False
 
 def is_canary():
     return credentials.get("ENVIROMENT", "STABLE") == "CANARY"
@@ -65,6 +72,36 @@ def load_all_extensions(*, folder=None):
         r = f"{folder}.{file.replace('.py', '')}"
         client.load_extension(r)
 
+async def wait_until_weekday():
+    global sy
+
+    now = datetime.datetime.now()
+    if now.weekday() > sy["weekday"]:
+        sy = next(says)
+
+    if isinstance(sy["weekday"], list):
+        condition = now.weekday() in sy["weekday"]
+    else:
+        condition = now.weekday() == sy["weekday"]
+
+    if condition:
+        should_mention = sy.get("should_mention", True)
+        allowed = None
+        role = None
+        guild = client.get_guild(sy["guild"])
+        channel = guild.get_channel(sy["channel"])
+        content = sy["content"]
+
+        if should_mention:
+            allowed = discord.AllowedMentions(roles=True)
+            role = guild.get_role(sy["role"])
+            content = f"{role.mention} {content}"
+
+        await channel.send(content, allowed_mentions=allowed)
+
+@tasks.loop(hours=24)
+async def dispatch_say():
+    await wait_until_weekday()
 
 load_all_extensions()
 
@@ -92,10 +129,12 @@ async def remove_snipes():
 
 @client.event
 async def on_ready():
-    logging.info('Bot pronto como ' + str(client.user) + "  (" + str(client.user.id) + ")")
+    logging.info('Bot pronto como ' + str(client.user) + " (" + str(client.user.id) + ")")
     if not hasattr(client, "chat_thread"):
         client.chat_thread = ChatterThread()
         client.chat_thread.start()
+    if can_use_says:
+        dispatch_say.start()
 
     client.last_statements = {}
     presence_setter.start()
@@ -105,6 +144,7 @@ async def on_ready():
 async def on_disconnect():
     presence_setter.stop()
     client.chat_thread.close()
+    dispatch_say.stop()
     remove_snipes.stop()
 
 @client.event
@@ -401,6 +441,12 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
         await ctx.channel.send(embed=discord.Embed(
             description='Canal {} adicionado como canal principal de respostas!'.format(channel.mention),
             color=0xff0000))
+
+@client.command(name="del")
+@commands.is_owner()
+async def delmsg(ctx, *, message : discord.Message):
+    if message.author == ctx.me:
+        await message.delete()
 
 @client.command()
 @commands.is_owner()
