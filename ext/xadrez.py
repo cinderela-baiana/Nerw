@@ -93,6 +93,9 @@ class MatchData(_Py_BaseMatchData):
 
         await self.channel.edit(overwrites=self.overwrites)
 
+    def __repr__(self):
+        return f"MatchData(board={self.board})"
+
 def _get_executable_suffix():
     import sys
 
@@ -418,7 +421,7 @@ class Chess(commands.Cog):
     async def imageboard(self, ctx, tab, move=None):
         brdobj = brd[alias[ctx.author.id]]
         match_id = brdobj.match_id
-
+        logger.debug("Board Atual -> %s ", brd)
         square = None
         if tab.is_check():
             pieces = tab.pieces(piece_type=chess.KING, color=tab.turn)

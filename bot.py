@@ -22,6 +22,11 @@ SYSTEM_ROOT = "/"
 humanize.i18n.activate("pt_BR")
 
 logging.basicConfig(level=logging.INFO)
+extensionlogger = logging.getLogger("ext")
+extensionlogger.setLevel(logging.DEBUG)
+handler = logging.FileHandler(filename="ext.log", encoding="utf-8", mode="w")
+handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+extensionlogger.addHandler(handler)
 
 intents = discord.Intents.all()
 intents.typing = False
@@ -100,7 +105,8 @@ async def wait_until_weekday():
         ]
         async for message in channel.history():
             if message.author.id == client.user.id:
-                msg.append(message)
+                if message.created_at.weekday() >= (datetime.datetime.now().weekday() - 1):
+                    msg.append(message)
         spl = content.split(" ")
         checkspl = spl[1]
 
