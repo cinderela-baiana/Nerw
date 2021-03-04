@@ -85,13 +85,28 @@ async def wait_until_weekday():
         allowed = None
         role = None
         guild = client.get_guild(sy["guild"])
-        channel = guild.get_channel(sy["channel"])
+        try:
+            channel = guild.get_channel(sy["channel"])
+        except AttributeError:
+            return logging.debug("Usando sistema canary.")
         content = sy["content"]
 
         if should_mention:
             allowed = discord.AllowedMentions(roles=True)
             role = guild.get_role(sy["role"])
             content = f"{role.mention} {content}"
+        msg = [
+
+        ]
+        async for message in channel.history():
+            if message.author.id == client.user.id:
+                msg.append(message)
+        spl = content.split(" ")
+        checkspl = spl[1]
+
+        for message in msg:
+            if checkspl in message.content:
+                return
 
         await channel.send(content, allowed_mentions=allowed)
 
@@ -413,8 +428,8 @@ async def exit(ctx):
 @client.command()
 async def ping(ctx):
     """Verifica seu ping."""
-    await ctx.reply(
-        'Pong! latência : {} ms \n https://tenor.com/KWO8.gif'.format(round(client.latency * 1000, 1)))
+    lat = round(client.latency * 1000, 1)
+    await ctx.reply(f'Pong! latência : {lat} ms \n https://tenor.com/KWO8.gif')
 
 @client.command(aliases=["channel", "sc"])
 @commands.has_permissions(manage_channels=True)

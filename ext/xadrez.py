@@ -31,7 +31,18 @@ CLEAN_CHESS_TABLE = chess.Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w K
 _Py_BaseMatchData = collections.namedtuple("MatchData",
                                            ("board", "white", "black",
                                             "difficulty", "match_id",
-                                            "overwrites", "spectators"))
+                                            "overwrites", "spectators", "creator"))
+
+QUESTION_EMOJI = "<:question:816429295005073419>"
+EXCLAMATION_EMOJI = "<:exclamation:816429295102328903> "
+CROSS_EMOJI = "<:cross:816429294501756928>"
+
+ONE_EMOJI = "<:1n:816740502342598676>"
+TWO_EMOJI = "<:2n:816740535905550366>"
+THREE_EMOJI = "<:3n:816740576292503582>"
+FOUR_EMOJI = "<:4n:816740620961579048>"
+FIVE_EMOJI = "<:5n:816740650002546729>"
+
 class MatchData(_Py_BaseMatchData):
     overwrites: dict
     board: chess.Board
@@ -39,6 +50,7 @@ class MatchData(_Py_BaseMatchData):
     black: int
     spectators: Set[int]
     match_id: str
+    creator: int
 
     def update_overwrites(self, **new_ovs):
         self.overwrites.update(**new_ovs)
@@ -54,10 +66,7 @@ class MatchData(_Py_BaseMatchData):
 
     @property
     def channel(self) -> discord.TextChannel:
-        try:
-            chan = channels[alias[self.white]]
-        except KeyError:
-            chan = channels[alias[self.black]]
+        chan = channels[self.creator]
         return chan
 
     @channel.setter
@@ -84,7 +93,6 @@ class MatchData(_Py_BaseMatchData):
 
         await self.channel.edit(overwrites=self.overwrites)
 
-
 def _get_executable_suffix():
     import sys
 
@@ -105,6 +113,9 @@ class Chess(commands.Cog):
         self._wins = None
         self.engine = chess.engine.SimpleEngine.popen_uci(file)
         logger.info("engine do xadrez carregada!")
+
+    def cog_unload(self):
+        self.engine.close()
 
     def _create_table(self):
         """
@@ -174,7 +185,7 @@ class Chess(commands.Cog):
             return
 
     @commands.group(aliases=["xadspec", "xadrez_spectate"], enabled=True)
-    async def xadrez_espectar(self, ctx, match_id : str=None):
+    async def xadrez_espectar(self, ctx):
         """
         Grupo de comandos que cuida da parte de espectação de partidas
 
@@ -186,33 +197,23 @@ class Chess(commands.Cog):
 
                 `,xadspec Uy_su72-wed44`.
         """
-        if ctx.invoked_subcommand is None and match_id is None:
+        if ctx.invoked_subcommand is None:
             command = self.client.get_command("help")
             await ctx.invoke(command, cmd="xadspec")
-        elif match_id is not None and ctx.invoked_subcommand is None:
-            await self.xadspec_join(ctx, match_id)
 
-    @xadrez_espectar.command()
-    async def join(self, ctx, match_id : str):
-        emoji = self.client.get_emoji(816429295102328903)
-        await ctx.reply(f"{emoji} Você quis dizer: `,xadspec {match_id}`, né?")
-
+    @xadrez_espectar.command(name="join")
     async def xadspec_join(self, ctx, match_code : str):
         """Começa a espectar uma partida de xadrez."""
         match_data = self.get_match_by_id(match_code)
 
         if match_data is None:
-            return await ctx.reply("Essa partida não existe ou já terminou.")
+            return await ctx.reply(f"{CROSS_EMOJI} Essa partida não existe ou já terminou.")
         if ctx.author.id in match_data.spectators:
-            return await ctx.reply("Você já está espectando essa partida.")
+            return await ctx.reply(f"{CROSS_EMOJI} Você já está espectando essa partida.")
 
         # legal é que não estamos fazendo nenhuma verificação
         # pra caso um dos jogadores saia do servidor.
-        try:
-            channel = channels[alias[match_data.white]]
-        except KeyError:
-            channel = channels[alias[match_data.black]]
-
+        channel = match_data.channel
         black, white = ctx.guild.get_member(match_data.black), ctx.guild.get_member(match_data.white)
 
         ov = {
@@ -244,6 +245,8 @@ class Chess(commands.Cog):
             blackuser = ctx.guild.get_member(match.black)
             whiteuser = ctx.guild.get_member(match.white)
             scheme.append(f"{match.match_id} - {blackuser} vs. {whiteuser}")
+        else:
+            scheme.append(f"{EXCLAMATION_EMOJI} Nenhuma partida...")
 
         await ctx.reply(embed=discord.Embed(title="Partidas disponíveis",
                                             description="\n".join(scheme),
@@ -309,7 +312,6 @@ class Chess(commands.Cog):
                                                                timeout=120)
 
                     except asyncio.TimeoutError:
-                        await ctx.send("Oh não! O usuário não reagiu a tempo.")
                         return
                     else:
                         pass
@@ -321,22 +323,33 @@ class Chess(commands.Cog):
 
                 else:
                     userplayer = ctx.me
-                    difficultylist = {"facinho" : 0, "fácil" : 5, "médio" : 10, "difícil" : 15, "hardicori" : 20}
-                    await ctx.send("Qual dificuldade você deseja:\n Facinho, fácil, médio, difícil ou hardicori?")
+                    descpr = f"{ONE_EMOJI} - Facinho\n{TWO_EMOJI} - Fácil\n{THREE_EMOJI} - médio\n{FOUR_EMOJI} - difícil \n{FIVE_EMOJI} - hardicori"
+                    embed = discord.Embed(title=f"{QUESTION_EMOJI} Escolha a dificuldade", description=descpr, color=discord.Color.from_rgb(240,240,240))
+                    reamsg = await ctx.send(embed=embed)
 
-                    def check(message):
-                        msgcon = message.content.lower() in difficultylist.keys()
-                        return message.author.id == ctx.author.id and message.channel == ctx.channel and msgcon
+                    emjtup = (ONE_EMOJI, TWO_EMOJI, THREE_EMOJI, FOUR_EMOJI, FIVE_EMOJI)
+                    for emj in emjtup:
+                        await reamsg.add_reaction(emj)
+
+                    def check(reaction: discord.Reaction, user: discord.Member):
+
+                        return user.id == ctx.author.id and str(reaction.emoji) in emjtup
 
                     try:
-                        message = await client.wait_for("message",
+                        reaction, user = await client.wait_for("reaction_add",
                                                         check=check,
                                                         timeout=30.0)
                     except asyncio.TimeoutError:
                         return
                     else:
-                        content = message.content.lower()
-                        dificuldade = difficultylist[content]
+                        mapping = {
+                            ONE_EMOJI: 0, # fácinho
+                            TWO_EMOJI: 5, # fácil
+                            THREE_EMOJI: 10, # médio
+                            FOUR_EMOJI: 15, # difícil
+                            FIVE_EMOJI: 20 # hardicori
+                        }
+                        dificuldade = mapping[str(reaction.emoji)]
 
                 data = self._create_match_id(ctx.author, userplayer)
                 rdm = random.randint(1, 2)
@@ -352,10 +365,11 @@ class Chess(commands.Cog):
                 alias[userplayer.id] = userplayer.id
                 brd[ctx.author.id] = MatchData(board=CLEAN_CHESS_TABLE, white=white,
                                                black=black, difficulty=dificuldade,
-                                               match_id=data, overwrites=None, spectators=set())
+                                               match_id=data, overwrites=None, spectators=set(),
+                                               creator=ctx.author.id)
 
                 channel = await self.create_channel(ctx, userplayer, match_id=data)
-                board : chess.Board= brd[ctx.author.id].board
+                board : chess.Board = brd[ctx.author.id].board
 
                 if board.turn == chess.WHITE:
                     color = "branco"
@@ -368,7 +382,7 @@ class Chess(commands.Cog):
 
                 logger.info("Nova partida de xadrez criada. (ID -> %s)", data)
         else:
-            await ctx.reply('Você já tem uma partida em andamento.')
+            await ctx.reply(f'{CROSS_EMOJI} Você já tem uma partida em andamento.')
 
     async def create_channel(self, ctx, userplayer, *, match_id=None):
         """
@@ -431,10 +445,10 @@ class Chess(commands.Cog):
             await channel.send(f'É a vez de {turn.mention}')
             if turn == ctx.me:
                 async with channel.typing():
-                    while True:
+                    for _ in range(0, 15):
                         try:
                             diff = brd[alias[ctx.author.id]].difficulty
-                            result = self.engine.play(tab, chess.engine.Limit(time=5), options={'Skill Level': diff})
+                            result = self.engine.play(tab, chess.engine.Limit(time=3), options={'Skill Level': diff})
                             tab.push(result.move)
                             await self.imageboard(ctx, tab, result.move)
                             break
