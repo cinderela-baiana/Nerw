@@ -21,13 +21,6 @@ from discord.ext import commands, tasks
 SYSTEM_ROOT = "/"
 humanize.i18n.activate("pt_BR")
 
-logging.basicConfig(level=logging.INFO)
-extensionlogger = logging.getLogger("ext")
-extensionlogger.setLevel(logging.DEBUG)
-handler = logging.FileHandler(filename="ext.log", encoding="utf-8", mode="w")
-handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-extensionlogger.addHandler(handler)
-
 intents = discord.Intents.all()
 intents.typing = False
 intents.integrations = False
