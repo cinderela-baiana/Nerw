@@ -26,7 +26,6 @@ channels = {}
 
 # importante: mudar isso pode quebrar o sistema de rankings do xadrez
 CHESS_TABLE_NAME = "chess_matches"
-CLEAN_CHESS_TABLE = chess.Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
 
 _Py_BaseMatchData = collections.namedtuple("MatchData",
                                            ("board", "white", "black",
@@ -92,6 +91,9 @@ class MatchData(_Py_BaseMatchData):
                 continue
 
         await self.channel.edit(overwrites=self.overwrites)
+
+    def __repr__(self):
+        return f"MatchData(board={self.board})"
 
 def _get_executable_suffix():
     import sys
@@ -363,7 +365,8 @@ class Chess(commands.Cog):
 
                 alias[ctx.author.id] = ctx.author.id # compatibilidade
                 alias[userplayer.id] = userplayer.id
-                brd[ctx.author.id] = MatchData(board=CLEAN_CHESS_TABLE, white=white,
+                cct = chess.Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
+                brd[ctx.author.id] = MatchData(board=cct, white=white,
                                                black=black, difficulty=dificuldade,
                                                match_id=data, overwrites=None, spectators=set(),
                                                creator=ctx.author.id)
@@ -418,7 +421,7 @@ class Chess(commands.Cog):
     async def imageboard(self, ctx, tab, move=None):
         brdobj = brd[alias[ctx.author.id]]
         match_id = brdobj.match_id
-
+        logger.debug("Board Atual -> %s ", brd)
         square = None
         if tab.is_check():
             pieces = tab.pieces(piece_type=chess.KING, color=tab.turn)
