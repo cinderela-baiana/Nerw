@@ -247,7 +247,7 @@ class Chess(commands.Cog):
             blackuser = ctx.guild.get_member(match.black)
             whiteuser = ctx.guild.get_member(match.white)
             scheme.append(f"{match.match_id} - {blackuser} vs. {whiteuser}")
-        else:
+        if scheme == []:
             scheme.append(f"{EXCLAMATION_EMOJI} Nenhuma partida...")
 
         await ctx.reply(embed=discord.Embed(title="Partidas disponíveis",
