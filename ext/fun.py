@@ -10,10 +10,13 @@ import random
 import io
 import datetime
 import aiohttp
+import yaml
 
-apitempo = '462cc03a77176b0e983f9f0c4c192f3b'
+with open("credentials.yaml") as fp:
+    apitempo = yaml.load(fp)["OPENSTREETMAP_KEY"]
+
 tempourl = "https://api.openweathermap.org/data/2.5/onecall?"
-geolocator = Nominatim(user_agent='joaovictor.lg020@gmail.com')
+geolocator = Nominatim(user_agent='GameraBot')
 
 class Tempo(menus.Menu):
     def __init__(self, ctx, request, cidade):
