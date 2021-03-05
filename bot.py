@@ -428,7 +428,7 @@ async def exit(ctx):
 async def ping(ctx):
     """Verifica seu ping."""
     lat = round(client.latency * 1000, 1)
-    await ctx.reply(f'Pong! latência : {lat} ms \n https://tenor.com/KWO8.gif')
+    await ctx.reply(f'Pong! latência : {lat} ms \n https://giphy.com/gifs/tennis-4IAzyrhy9rkis')
 
 @client.command(aliases=["channel", "sc"])
 @commands.has_permissions(manage_channels=True)
