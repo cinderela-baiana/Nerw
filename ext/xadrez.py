@@ -35,6 +35,7 @@ _Py_BaseMatchData = collections.namedtuple("MatchData",
 QUESTION_EMOJI = "<:question:816429295005073419>"
 EXCLAMATION_EMOJI = "<:exclamation:816429295102328903> "
 CROSS_EMOJI = "<:cross:816429294501756928>"
+INFO_EMOJI = "<:4497_info:816429294774517810>"
 
 ONE_EMOJI = "<:1n:816740502342598676>"
 TWO_EMOJI = "<:2n:816740535905550366>"
@@ -56,7 +57,7 @@ class MatchData(_Py_BaseMatchData):
         return self.overwrites
 
     def set_overwrites(self, new_overwrite: dict):
-        self.overwrites = new_overwrite
+        self._replace(overwrites=new_overwrite)
 
     def add_spectator(self, spectator):
         if isinstance(spectator, discord.Member):
@@ -91,6 +92,9 @@ class MatchData(_Py_BaseMatchData):
                 continue
 
         await self.channel.edit(overwrites=self.overwrites)
+
+    def __contains__(self, item):
+        return
 
     def __repr__(self):
         return f"MatchData(board={self.board})"

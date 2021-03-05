@@ -21,6 +21,8 @@ from discord.ext import commands, tasks
 SYSTEM_ROOT = "/"
 humanize.i18n.activate("pt_BR")
 
+logging.basicConfig(level=logging.INFO)
+
 intents = discord.Intents.all()
 intents.typing = False
 intents.integrations = False

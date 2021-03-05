@@ -7,6 +7,7 @@ import discord
 class Help(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
+
     def get_command_help(self, ctx, command):
         if command is None:
             raise ValueError
@@ -45,6 +46,8 @@ class Help(commands.Cog):
 
         return embed
 
+    def get_hidden_commands(self):
+        return list(filter(lambda command : command.enabled, self.client.commands))
 
     @commands.command(name="help")
     async def _help(self, ctx, *, cmd: Optional[str]):
@@ -56,6 +59,7 @@ class Help(commands.Cog):
             color = ctx.me.color
 
         if cmd is None:
+            appinfo = await self.client.application_info()
             filt = filter(lambda command : not command.hidden, self.client.commands)
             cmds = list(map(lambda command : f"`{command.name}`", filt))
             all_commands = " | ".join(cmds)
@@ -64,6 +68,14 @@ class Help(commands.Cog):
             url = discord.utils.oauth_url(self.client.user.id, permissions)
             eb = discord.Embed(description=all_commands, color=color)
             eb.set_author(name="Me convide para o seu servidor!", url=url)
+
+            if ctx.author.id in list(map(lambda user : user.id, appinfo.team.members)):
+                filt = filter(lambda command: command.hidden, self.client.commands)
+                cmds = list(map(lambda command: f"`{command.name}`", filt))
+                all_commands = " | ".join(cmds)
+
+                hidden_embed = discord.Embed(title=":detective:", description=all_commands)
+                await ctx.author.send(embed=hidden_embed)
 
             await ctx.reply(embed=eb)
         else:
@@ -76,7 +88,8 @@ class Help(commands.Cog):
             except ValueError:
                 await ctx.reply(f"Não existe nenhum comando com o nome **{cmd}**.")
                 return
-            await ctx.reply(embed=hlp)
+            else:
+                await ctx.reply(embed=hlp)
 
 def setup(client):
     client.add_cog(Help(client))
