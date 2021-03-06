@@ -18,20 +18,15 @@ class Help(commands.Cog):
             color = ctx.me.color
 
         aliases_copy = deepcopy(command.aliases)
-        embed = discord.Embed(title=command.name,
+        embed = discord.Embed(title=command.qualified_name,
                               description=command.usage,
                               color=color)
-        try:
-            aliases_copy.remove(ctx.invoked_with)
-        except ValueError:
-            # não tem problema se o apelido não estiver presente
-            pass
 
         alal = "|".join(aliases_copy)
 
         embed.add_field(name="Descrição", value=command.help if command.help is not None else "Nenhuma ajuda disponível")
         embed.add_field(name="Apelidos", value=alal if alal != "" else "Nenhum", inline=False)
-        embed.add_field(name="Argumentação", value=f"`{command.name} {command.signature}`", inline=True)
+        embed.add_field(name="Argumentação", value=f"`{command.qualified_name} {command.signature}`", inline=True)
         return embed
 
     def get_subcommand_help(self, ctx, command: commands.Group):
@@ -40,8 +35,7 @@ class Help(commands.Cog):
         scheme = []
 
         for cmd in cmds:
-            brief = "Nenhuma ajuda disponível" if cmd.brief is None else cmd.brief
-            scheme.append(f"`,{command.qualified_name} {cmd.name}` -- {brief}.")
+            scheme.append(f"`,{command.qualified_name} {cmd.name}`")
         embed.add_field(name="Subcomandos", value="\n".join(scheme))
 
         return embed

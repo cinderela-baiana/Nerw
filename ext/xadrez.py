@@ -57,7 +57,8 @@ class MatchData(_Py_BaseMatchData):
         return self.overwrites
 
     def set_overwrites(self, new_overwrite: dict):
-        self._replace(overwrites=new_overwrite)
+        self.overwrites = new_overwrite
+        return self
 
     def add_spectator(self, spectator):
         if isinstance(spectator, discord.Member):
@@ -94,7 +95,15 @@ class MatchData(_Py_BaseMatchData):
         await self.channel.edit(overwrites=self.overwrites)
 
     def __contains__(self, item):
-        return
+        if isinstance(item, discord.Member):
+            item = item.id
+        return item == self.black or item == self.white
+
+    def __eq__(self, other):
+        return isinstance(other, MatchData) and other.match_id == self.match_id
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def __repr__(self):
         return f"MatchData(board={self.board})"
@@ -201,7 +210,7 @@ class Chess(commands.Cog):
         Exemplo:
             \* **Entrar em uma partida**
 
-                `,xadspec Uy_su72-wed44`.
+                `,xadspec join Uy_su72-wed44`.
         """
         if ctx.invoked_subcommand is None:
             command = self.client.get_command("help")
@@ -293,6 +302,22 @@ class Chess(commands.Cog):
 
         await ctx.reply("\n".join(descr))
 
+    @xadrez_espectar.command(name="quit", aliases=["exit"])
+    async def xadrez_espectar_exit(self, ctx, match_id: Optional[str]):
+        """
+        Deixa de espectar a partida que você está espectando.
+        """
+        matches = list(filter(lambda match : ctx.author.id in match.spectators, self.get_current_matches()))
+        if len(matches) > 1 and match_id is None:
+            return await ctx.reply(f"{QUESTION_EMOJI} De qual partida você está falando?")
+        elif len(matches) == 0:
+            return await ctx.reply(f"{CROSS_EMOJI} Você não está espectando nenhuma partida ou o ID informado "
+                                    "não corresponde a nenhuma partida.")
+        match: MatchData = matches[0]
+
+        await match.remove_spectator(ctx.author)
+        await ctx.reply(f"{INFO_EMOJI} Você deixou de espectar a partida **{match_id}**")
+
     @commands.command(aliases=["xadin"])
     @commands.bot_has_guild_permissions(manage_channels=True)
     async def xadrez_iniciar(self, ctx, userplayer: Union[discord.Member, str]):
@@ -329,7 +354,7 @@ class Chess(commands.Cog):
 
                 else:
                     userplayer = ctx.me
-                    descpr = f"{ONE_EMOJI} - Facinho\n{TWO_EMOJI} - Fácil\n{THREE_EMOJI} - médio\n{FOUR_EMOJI} - difícil \n{FIVE_EMOJI} - hardicori"
+                    descpr = f"{ONE_EMOJI} - sou um bebê que não sabe jogar xadrez\n{TWO_EMOJI} - fácil\n{THREE_EMOJI} - médio\n{FOUR_EMOJI} - difícil \n{FIVE_EMOJI} - hardicori"
                     embed = discord.Embed(title=f"{QUESTION_EMOJI} Escolha a dificuldade", description=descpr, color=discord.Color.from_rgb(240,240,240))
                     reamsg = await ctx.send(embed=embed)
 
@@ -415,7 +440,7 @@ class Chess(commands.Cog):
                                                       overwrites=ov, topic=f"ID -> {match_id}", category=category)
         channels[alias[ctx.author.id]] = channel
         match = self.get_match_by_id(match_id)
-        brd[alias[ctx.author.id]] = match._replace(overwrites=ov)
+        brd[ctx.author.id] = match._replace(overwrites=ov)
         return channel
 
     def _create_match_id(self, *competitors) -> str:

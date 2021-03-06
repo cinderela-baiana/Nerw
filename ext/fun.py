@@ -12,7 +12,7 @@ import datetime
 import aiohttp
 import yaml
 
-with open("credentials.yaml") as fp:
+with open("config/credentials.yaml") as fp:
     apitempo = yaml.load(fp)["OPENSTREETMAP_KEY"]
 
 tempourl = "https://api.openweathermap.org/data/2.5/onecall?"

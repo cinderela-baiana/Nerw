@@ -10,6 +10,11 @@ import sys
 import psutil
 import humanize
 import datetime
+import platform
+if sys.version_info >= (3,9):
+    # uma gambiarra pra corrigir um bug no SQLAlchemy.
+    import time
+    time.clock = time.perf_counter()
 
 from typing import Optional
 from itertools import cycle
@@ -394,10 +399,15 @@ async def botinfo(ctx):
     hum_hdd_busy = humanize.filesize.naturalsize(hdd.total)
 
     embed = discord.Embed(title="Informações técnicas sobre o bot.")
+    embed.description = "Veja o meu [código fonte](https://github.com/joao-0213/BotGamera)."
+    embed.color = discord.Color.orange()
+    
     embed.add_field(name="Porcentagem de uso dos núcleos", value=threads, inline=True)
     embed.add_field(name="Memória RAM", value=memstr, inline=True)
     embed.add_field(name="Disco Rígido", value=f"{hum_hdd_free} usados de {hum_hdd_busy}")
-    embed.add_field(name="Quantidade de servidores em que o bot está", value=str(len(client.guilds)))
+    embed.add_field(name="Quantidade de servidores em que o bot está", value=str(len(client.guilds)), inline=False)
+    embed.add_field(name="Versão do Python", value=f"Python {platform.python_version()}")
+    embed.add_field(name="Versão do discord.py", value=f"discord.py {discord.__version__}")
     await ctx.reply(embed=embed)
 
 @client.command()
