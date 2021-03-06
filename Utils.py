@@ -7,7 +7,6 @@ from typing import *
 import sqlite3
 import aiosqlite
 import contextlib
-import os
 import pathlib
 
 PathLike = Union[str, pathlib.Path]
@@ -128,7 +127,7 @@ class AsyncDatabaseWrap(DatabaseWrap):
         await self._cursor.execute(sql)
         await self._connection.commit()
 
-    async def get_item(self, table_name: str, where: str=None, item_name: str=None):
+    async def get_item(self, table_name: str, where: str=None, item_name: str=None, *, fetchall=False):
         await self._create_cursor()
         if item_name is None:
             item_name = "*"
@@ -138,7 +137,7 @@ class AsyncDatabaseWrap(DatabaseWrap):
             sql += f" WHERE {where}"
         await self._cursor.execute(sql)
 
-        if item_name == "*":
+        if fetchall:
             fetched = await self._cursor.fetchall()
         else:
             fetched = await self._cursor.fetchone()
@@ -164,6 +163,9 @@ class AsyncDatabaseWrap(DatabaseWrap):
 
     async def close(self):
         if not self.closed:
+            await self._connection.commit()
+            if self._cursor is not None:
+                await self._cursor.close()
             await self._connection.close()
             self.closed = True
 
