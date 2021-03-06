@@ -7,7 +7,7 @@ from typing import *
 import sqlite3
 import aiosqlite
 import contextlib
-import asyncio
+import os
 import pathlib
 
 PathLike = Union[str, pathlib.Path]

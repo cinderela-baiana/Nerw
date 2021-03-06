@@ -284,6 +284,8 @@ class Chess(commands.Cog):
         big_chunk = list(enumerate(self.calculate_positions(winn), 1))
 
         for position, (winner_id, win_count) in big_chunk:
+            if winner_id is None:
+                continue
             user = ctx.guild.get_member(int(winner_id))
             if user is None:
                 user = winner_id

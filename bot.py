@@ -109,6 +109,9 @@ async def dispatch_say():
     with open("assets/says_records.yaml", "r") as fp:
         content = yaml.safe_load(fp)["records"]
 
+    if content is None:
+        content = []
+
     for day in content:
         if datetime.datetime.now().strftime("%d/%m/%Y") == day:
             return
@@ -183,7 +186,7 @@ async def on_guild_join(guild: discord.Guild):
     qtnchan = suppg.get_channel(815313065909682178)
 
     if suppg is None or qtnchan is None:
-        logging.warning("Eu não estou no servidor do bot ou " 
+        logging.warning("Eu não estou no servidor do bot ou "
                         "o canal de voz com os servidores não exite mais!")
         return
 
@@ -195,7 +198,7 @@ async def on_guild_remove(guild: discord.Guild):
     qtnchan = suppg.get_channel(815313065909682178)
 
     if suppg is None or qtnchan is None:
-        logging.warning("Eu não estou no servidor do bot ou " 
+        logging.warning("Eu não estou no servidor do bot ou "
                         "o canal de voz com os servidores não exite mais!")
         return
 
@@ -353,7 +356,7 @@ async def refqtn(ctx):
     qtnchan = suppg.get_channel(815313065909682178)
 
     if suppg is None or qtnchan is None:
-        logging.warning("Eu não estou no servidor do bot ou " 
+        logging.warning("Eu não estou no servidor do bot ou "
                         "o canal de voz com os servidores não exite mais!")
         return
 
@@ -401,7 +404,7 @@ async def botinfo(ctx):
     embed = discord.Embed(title="Informações técnicas sobre o bot.")
     embed.description = "Veja o meu [código fonte](https://github.com/joao-0213/BotGamera)."
     embed.color = discord.Color.orange()
-    
+
     embed.add_field(name="Porcentagem de uso dos núcleos", value=threads, inline=True)
     embed.add_field(name="Memória RAM", value=memstr, inline=True)
     embed.add_field(name="Disco Rígido", value=f"{hum_hdd_free} usados de {hum_hdd_busy}")
