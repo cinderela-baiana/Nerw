@@ -11,7 +11,7 @@ import psutil
 import humanize
 import datetime
 import platform
-if sys.version_info >= (3,9):
+if sys.version_info >= (3, 9):
     # uma gambiarra pra corrigir um bug no SQLAlchemy.
     import time
     time.clock = time.perf_counter()
@@ -76,9 +76,7 @@ def load_all_extensions(*, folder=None):
         r = f"{folder}.{file.replace('.py', '')}"
         client.load_extension(r)
 
-async def wait_until_weekday():
-    sy = next(says)
-
+async def wait_until_weekday(sy):
     now = datetime.datetime.now()
     if isinstance(sy["weekday"], list):
         condition = now.weekday() in sy["weekday"]
@@ -93,32 +91,34 @@ async def wait_until_weekday():
         try:
             channel = guild.get_channel(sy["channel"])
         except AttributeError:
-            return logging.debug("Usando sistema canary.")
+            logging.debug("Usando sistema canary.")
+            return False
         content = sy["content"]
 
         if should_mention:
             allowed = discord.AllowedMentions(roles=True)
             role = guild.get_role(sy["role"])
             content = f"{role.mention} {content}"
-        msg = [
-
-        ]
-        async for message in channel.history():
-            if message.author.id == client.user.id:
-                if message.created_at.weekday() >= (datetime.datetime.now().weekday() - 1):
-                    msg.append(message)
-        spl = content.split(" ")
-        checkspl = spl[1]
-
-        for message in msg:
-            if checkspl in message.content:
-                return
 
         await channel.send(content, allowed_mentions=allowed)
+        return True
+    return False
 
 @tasks.loop(hours=24)
 async def dispatch_say():
-    await wait_until_weekday()
+    with open("assets/says_records.yaml", "r") as fp:
+        content = yaml.safe_load(fp)["records"]
+
+    for day in content:
+        if datetime.datetime.now().strftime("%d/%m/%Y") == day:
+            return
+
+    sy = next(says)
+    result = await wait_until_weekday(sy)
+    if result:
+        content.append(datetime.datetime.now().strftime("%d/%m/%Y"))
+        with open("assets/says_records.yaml", "w") as fp:
+            yaml.safe_dump(content, fp)
 
 load_all_extensions()
 
