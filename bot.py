@@ -86,7 +86,6 @@ async def wait_until_weekday(sy):
     if condition:
         should_mention = sy.get("should_mention", True)
         allowed = None
-        role = None
         guild = client.get_guild(sy["guild"])
         try:
             channel = guild.get_channel(sy["channel"])
@@ -106,22 +105,30 @@ async def wait_until_weekday(sy):
 
 @tasks.loop(hours=24)
 async def dispatch_say():
-    with open("assets/says_records.yaml", "r") as fp:
-        content = yaml.safe_load(fp)["records"]
+    async with create_async_database("main.db") as db:
+        await db.create_table_if_absent("says_verf", (
+            Field(name="day", type="INTEGER"),
+            Field(name="month", type="INTEGER"),
+            Field(name="year", type="INTEGER")
+        ))
+        dates = await db.get_item("says_verf", fetchall=True)
+        print(dates)
+    try:
+       day, month, year = dates[len(dates) - 1]
+    except IndexError:
+        day, month, year = 0, 0, 0
 
-    if content is None:
-        content = []
-
-    for day in content:
-        if datetime.datetime.now().strftime("%d/%m/%Y") == day:
-            return
+    now = datetime.datetime.now()
+    if (day, month, year) == (now.day, now.month, now.year):
+        return
 
     sy = next(says)
     result = await wait_until_weekday(sy)
     if result:
-        content.append(datetime.datetime.now().strftime("%d/%m/%Y"))
-        with open("assets/says_records.yaml", "w") as fp:
-            yaml.safe_dump(content, fp)
+        now = datetime.datetime.now()
+        async with create_async_database("main.db") as db:
+            await db._cursor.execute("INSERT INTO says_verf(day,month,year) VALUES(?,?,?)",
+                               (now.day, now.month, now.year))
 
 load_all_extensions()
 
@@ -224,7 +231,6 @@ async def on_raw_reaction_add(struct):
         return None  # ignorar DMs
 
     async with create_async_database("main.db") as wrap:
-
         fields = (
             Field(name="channel", type="TEXT"),
             Field(name="message", type="TEXT"),

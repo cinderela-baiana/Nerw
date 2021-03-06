@@ -57,7 +57,12 @@ class MatchData(_Py_BaseMatchData):
         return self.overwrites
 
     def set_overwrites(self, new_overwrite: dict):
-        self.overwrites = new_overwrite
+        for k, _ in self.overwrites.items():
+            if k not in new_overwrite.keys():
+                del self.overwrites[k]
+
+        for k, v in new_overwrite.items():
+            self.overwrites[k] = v
         return self
 
     def add_spectator(self, spectator):
