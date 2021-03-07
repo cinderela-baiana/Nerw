@@ -55,4 +55,6 @@ async def leave(ctx):
     else:
         await ctx.send('Eu não estou em um canal de voz')
 
-
+class Audio(commands.Cog):
+    def __init__(self, client):
+        self.client = client
