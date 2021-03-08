@@ -46,15 +46,12 @@ with open("config/activities.json") as fp:
     activities = cycle(json.load(fp))
 with open('config/credentials.yaml') as t:
     credentials = yaml.load(t)
-try:
-    with open("assets/says.json", encoding="utf-8") as js:
-        says = cycle(json.load(js))
-    can_use_says = True
-except FileNotFoundError:
-    can_use_says = False
+with open("assets/says.json", encoding="utf-8") as js:
+    says = cycle(json.load(js))
+can_use_says = True
 
 def is_canary():
-    return credentials.get("ENVIROMENT", "STABLE") == "CANARY"
+    return credentials.get("ENVIROMENT", "CANARY") == "CANARY"
 
 prefix = credentials.get("PREFIXO")
 if is_canary():
@@ -68,40 +65,16 @@ client.remove_command("help")
 
 def load_all_extensions(*, folder=None):
     """Carrega todas as extensões."""
+    for ext in get_all_extensions(folder=folder):
+        client.load_extension(ext)
 
+def get_all_extensions(*, folder=None):
     if folder is None:
         folder = "ext"
     filt = filter(lambda fold: fold.endswith(".py") and not fold.startswith("_"), os.listdir(folder))
     for file in filt:
         r = f"{folder}.{file.replace('.py', '')}"
-        client.load_extension(r)
-
-async def wait_until_weekday(sy):
-    now = datetime.datetime.now()
-    if isinstance(sy["weekday"], list):
-        condition = now.weekday() in sy["weekday"]
-    else:
-        condition = now.weekday() == sy["weekday"]
-
-    if condition:
-        should_mention = sy.get("should_mention", True)
-        allowed = None
-        guild = client.get_guild(sy["guild"])
-        try:
-            channel = guild.get_channel(sy["channel"])
-        except AttributeError:
-            logging.debug("Usando sistema canary.")
-            return False
-        content = sy["content"]
-
-        if should_mention:
-            allowed = discord.AllowedMentions(roles=True)
-            role = guild.get_role(sy["role"])
-            content = f"{role.mention} {content}"
-
-        await channel.send(content, allowed_mentions=allowed)
-        return True
-    return False
+        yield r
 
 @tasks.loop(hours=24)
 async def dispatch_say():
@@ -112,12 +85,10 @@ async def dispatch_say():
             Field(name="year", type="INTEGER")
         ))
         dates = await db.get_item("says_verf", fetchall=True)
-        print(dates)
     try:
        day, month, year = dates[len(dates) - 1]
     except IndexError:
         day, month, year = 0, 0, 0
-
     now = datetime.datetime.now()
     if (day, month, year) == (now.day, now.month, now.year):
         return
@@ -129,6 +100,35 @@ async def dispatch_say():
         async with create_async_database("main.db") as db:
             await db._cursor.execute("INSERT INTO says_verf(day,month,year) VALUES(?,?,?)",
                                (now.day, now.month, now.year))
+
+async def wait_until_weekday(sy):
+    if is_canary():
+        dispatch_say.stop()
+        return False
+
+    now = datetime.datetime.now()
+    if isinstance(sy["weekday"], list):
+        condition = now.weekday() in sy["weekday"]
+    else:
+        condition = now.weekday() == sy["weekday"]
+
+    if condition:
+        should_mention = sy.get("should_mention", True)
+        allowed = None
+        guild = client.get_guild(sy["guild"])
+        channel = guild.get_channel(sy["channel"])
+
+        content = sy["content"]
+
+        if should_mention:
+            allowed = discord.AllowedMentions(roles=True)
+            role = guild.get_role(sy["role"])
+            content = f"{role.mention} {content}"
+
+        await channel.send(content, allowed_mentions=allowed)
+        return True
+    return False
+
 
 load_all_extensions()
 
@@ -473,13 +473,7 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
             description='Canal {} adicionado como canal principal de respostas!'.format(channel.mention),
             color=0xff0000))
 
-@client.command(name="del")
-@commands.is_owner()
-async def delmsg(ctx, *, message : discord.Message):
-    if message.author == ctx.me:
-        await message.delete()
-
-@client.command()
+@client.command(hidden=True)
 @commands.is_owner()
 async def lex(ctx, *, extension: str):
     """Carrega uma extensão."""
@@ -497,9 +491,11 @@ async def lex(ctx, *, extension: str):
         return
     await ctx.reply("Extensão carregada :+1:")
 
-@client.command()
+@client.command(hidden=True)
 @commands.is_owner()
 async def unlex(ctx, *, extension: str):
+    """Descarrega uma extensão."""
+
     try:
         client.unload_extension(f"ext.{extension}")
     except commands.ExtensionNotLoaded as ex:
@@ -507,7 +503,7 @@ async def unlex(ctx, *, extension: str):
         return
     await ctx.reply("Extensão descarregada :+1:")
 
-@client.command(aliases=["relax"])
+@client.command(aliases=["relax"], hidden=True)
 @commands.is_owner()
 async def relex(ctx, extension: str):
     """Recarrega uma extensão."""
@@ -517,6 +513,18 @@ async def relex(ctx, extension: str):
         await ctx.reply(f"A extensão `{ex.name}` não foi carregada ou não existe.")
         return
     await ctx.reply("Extensão recarregada :+1:")
+
+@client.command(hidden=True)
+@commands.is_owner()
+async def extstatus(ctx):
+    """Vê o status de todas as extensões do bot."""
+    schemes = []
+    for ext in get_all_extensions():
+        possible_extension = client.extensions.get(ext)
+        extension_status = "Carregado" if possible_extension is not None else "Descarregado"
+        schemes.append(f"`{ext}` - {extension_status}")
+
+    await ctx.reply("\n".join(schemes))
 
 token = credentials.get("CANARY_TOKEN") if is_canary() else credentials.get("TOKEN")
 client.run(token)
