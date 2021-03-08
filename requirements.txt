@@ -1,5 +1,5 @@
 geopy
-discord.py>=1.6
+discord.py[voice]>=1.6
 spacy==2.3.5
 ChatterBot
 chatterbot-corpus
