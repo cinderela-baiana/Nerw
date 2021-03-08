@@ -11,6 +11,7 @@ import psutil
 import humanize
 import datetime
 import platform
+import random
 if sys.version_info >= (3, 9):
     # uma gambiarra pra corrigir um bug no SQLAlchemy.
     import time
@@ -128,7 +129,6 @@ async def wait_until_weekday(sy):
         await channel.send(content, allowed_mentions=allowed)
         return True
     return False
-
 
 load_all_extensions()
 

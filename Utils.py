@@ -179,3 +179,5 @@ def is_blacklisted():
 
     return commands.check(actual)
 
+# constantes
+HALF_HOUR_IN_SECS = 3600 / 2
