@@ -1,2 +1,11 @@
-config/credentials.*
 obama_known
+__pycache__
+assets
+
+*.db
+*.sqlite3
+*.log
+*.png
+*.jpg
+config/credentials.*
+config/*.exe
