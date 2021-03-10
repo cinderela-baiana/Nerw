@@ -23,7 +23,8 @@ class ImageCog(commands.Cog):
 
         async with aiohttp.ClientSession() as session:
             async with session.get(MEMEMAN_IMG) as request:
-               return await request.read()
+                self._mememan_bytes = await request.read()
+                return self._mememan_bytes
 
     @commands.command()
     @commands.cooldown(1, 30, commands.BucketType.member)
