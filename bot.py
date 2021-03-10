@@ -30,7 +30,7 @@ humanize.i18n.activate("pt_BR")
 logging.basicConfig(level=logging.INFO)
 
 intents = discord.Intents.all()
-intents.typing = False
+intents.typing = True
 intents.integrations = False
 
 # evita do bot mencionar everyone e cargos
@@ -407,9 +407,8 @@ async def botinfo(ctx):
     hum_hdd_free = humanize.filesize.naturalsize(hdd.used)
     hum_hdd_busy = humanize.filesize.naturalsize(hdd.total)
 
-    embed = discord.Embed(title="Informações técnicas sobre o bot.")
+    embed = discord.Embed(title="Informações técnicas sobre o bot.", color=discord.Color.orange())
     embed.description = "Veja o meu [código fonte](https://github.com/joao-0213/BotGamera)."
-    embed.color = discord.Color.orange()
 
     embed.add_field(name="Porcentagem de uso dos núcleos", value=threads, inline=True)
     embed.add_field(name="Memória RAM", value=memstr, inline=True)
@@ -417,6 +416,7 @@ async def botinfo(ctx):
     embed.add_field(name="Quantidade de servidores em que o bot está", value=str(len(client.guilds)), inline=False)
     embed.add_field(name="Versão do Python", value=f"Python {platform.python_version()}")
     embed.add_field(name="Versão do discord.py", value=f"discord.py {discord.__version__}")
+    embed.add_field(name="Sistema operacional atual", value=platform.platform())
     await ctx.reply(embed=embed)
 
 @client.command()

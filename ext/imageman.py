@@ -15,17 +15,26 @@ def splitlen(string, per):
 class ImageCog(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
+        self._mememan_bytes = None
+
+    async def fetch_mememan(self):
+        if self._mememan_bytes is not None:
+            return self._mememan_bytes
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(MEMEMAN_IMG) as request:
+               return await request.read()
 
     @commands.command()
     @commands.cooldown(1, 30, commands.BucketType.member)
     async def mememan(self, ctx, *, text: str):
         async with ctx.typing():
-            async with aiohttp.ClientSession() as session:
-                async with session.get(MEMEMAN_IMG) as request:
-                    image: Image.Image = Image.open(io.BytesIO(await request.read()))
+            image: Image.Image = Image.open(io.BytesIO(await self.fetch_mememan()))
 
             if len(text) > FONT_LIMIT:
                 text = "\n".join(splitlen(text, FONT_LIMIT))
+
+            # a gente vai soltar um JPG, e JPGs não suportam alpha.
             image = image.convert("RGB")
             image_draw = ImageDraw.Draw(image)
 
@@ -91,7 +100,6 @@ class ImageCog(commands.Cog):
             file = discord.File(fp, "palette.png")
 
         await ctx.reply(file=file)
-
 
 def setup(client):
     client.add_cog(ImageCog(client))

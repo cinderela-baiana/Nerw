@@ -7,7 +7,7 @@ from chatter_thread import ChatterThread
 import discord
 import asyncio
 import random
-import io
+import humanize
 import datetime
 import aiohttp
 import yaml
@@ -323,9 +323,6 @@ class Misc(commands.Cog):
         except asyncio.TimeoutError:
            return
         else:
-            if message.content.startswith(",report"):
-                await self._handle_report(ctx, user)
-                return
             con = " ".join(message.content.split(" ")[1:])
 
             embed = discord.Embed(
@@ -340,10 +337,6 @@ class Misc(commands.Cog):
                 files = [await att.to_file() for att in message.attachments]
 
             await ctx.author.send(embed=embed, files=files)
-
-    async def _handle_report(self, ctx, user):
-        appinfo = await self.client.application_info()
-
 
     @commands.cooldown(1, 20.0, commands.BucketType.member)
     @commands.command()
@@ -382,6 +375,29 @@ class Misc(commands.Cog):
         if isinstance(ctx.me, discord.ClientUser): # estamos em uma DM.
             return discord.Color.dark_red()
         return ctx.me.color
+
+    @commands.command()
+    @commands.cooldown(1, 5, commands.BucketType.member)
+    async def stopwatch(self, ctx):
+        await ctx.send(f"{ctx.author.mention} Envie uma mensagem!")
+        try:
+            def check(channel, user, when):
+                return ctx.channel.id == channel.id and user.id == ctx.author.id
+            _, _, typing_when = await self.client.wait_for("typing", check=check, timeout=30.0)
+        except asyncio.TimeoutError:
+            return
+        else:
+            def check(message):
+                return message.channel.id == ctx.channel.id and message.author.id == ctx.author.id
+            try:
+                message = await self.client.wait_for("message", check=check, timeout=30.0)
+            except asyncio.TimeoutError:
+                return
+            else:
+                tdelta = message.created_at - typing_when
+
+                return await message.reply(f"Você demorou " + humanize.time.naturaldelta(tdelta,
+                                                                                    minimum_unit="milliseconds"))
 
 def setup(client):
     client.add_cog(Misc(client))

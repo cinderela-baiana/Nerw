@@ -4,6 +4,7 @@ from dataclass import write_blacklist, write_reaction_messages_to_file
 from typing import Union, Optional
 
 import discord
+import psutil
 
 
 class Moderation(commands.Cog):
@@ -170,7 +171,6 @@ class Moderation(commands.Cog):
         else:
             write_reaction_messages_to_file(channel.id, message.id, emoji.id, role.id)
             await channel.send("Mensagem reagida com sucesso!")
-
 
 def setup(client):
     client.add_cog(Moderation(client))

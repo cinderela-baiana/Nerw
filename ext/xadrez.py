@@ -219,7 +219,8 @@ class Chess(commands.Cog):
             return await ctx.reply(f"{CROSS_EMOJI} Essa partida não existe ou já terminou.")
         if ctx.author.id in match_data.spectators:
             return await ctx.reply(f"{CROSS_EMOJI} Você já está espectando essa partida.")
-
+        if ctx.author in match_data:
+            return await ctx.reply(f"{CROSS_EMOJI} Você é um dos participantes da partida.")
         # legal é que não estamos fazendo nenhuma verificação
         # pra caso um dos jogadores saia do servidor.
         channel = match_data.channel

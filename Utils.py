@@ -8,6 +8,7 @@ import sqlite3
 import aiosqlite
 import contextlib
 import pathlib
+import asyncio
 
 PathLike = Union[str, pathlib.Path]
 
@@ -15,6 +16,7 @@ PathLike = Union[str, pathlib.Path]
 async def create_async_database(path: PathLike):
     connection = await AsyncDatabaseWrap.from_filepath(path)
     try:
+        await connection.wait_cursor()
         yield connection
     finally:
         await connection.close()
@@ -101,9 +103,14 @@ class DatabaseWrap:
 
 class AsyncDatabaseWrap(DatabaseWrap):
     def __init__(self, connection: aiosqlite.Connection):
-        self._connection = connection
         self.closed = False
+        self._connection = connection
         self._cursor: Optional[aiosqlite.Cursor] = None
+        self._cursor_event = asyncio.Event()
+        asyncio.create_task(self._create_cursor())
+
+    async def wait_cursor(self):
+        await self._cursor_event.wait()
 
     async def create_table_if_absent(self, table_name: str, fields: List[Field]) -> None:
         await self._create_cursor()
@@ -147,6 +154,7 @@ class AsyncDatabaseWrap(DatabaseWrap):
     async def _create_cursor(self):
         if self._cursor is None:
             self._cursor = await self._connection.cursor()
+            self._cursor_event.set()
 
     @classmethod
     async def from_filepath(cls, filename: PathLike):
@@ -154,18 +162,12 @@ class AsyncDatabaseWrap(DatabaseWrap):
             filename = filename.resolve()
         return cls(await aiosqlite.connect(filename))
 
-    async def __aenter__(self):
-        await self._create_cursor()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
-
     async def close(self):
         if not self.closed:
             await self._connection.commit()
             if self._cursor is not None:
                 await self._cursor.close()
+                self._cursor_event.clear()
             await self._connection.close()
             self.closed = True
 
@@ -191,4 +193,3 @@ TWO_EMOJI = "<:2n:816740535905550366>"
 THREE_EMOJI = "<:3n:816740576292503582>"
 FOUR_EMOJI = "<:4n:816740620961579048>"
 FIVE_EMOJI = "<:5n:816740650002546729>"
-
