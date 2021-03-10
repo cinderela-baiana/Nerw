@@ -1,12 +1,9 @@
-﻿from discord.ext import commands
-import chess
+﻿import chess
 import discord
 import asyncio
-from typing import *
 import random
 import emoji
 import logging
-from cairosvg import svg2png
 import chess.svg
 import chess.engine
 import secrets
@@ -16,7 +13,10 @@ import uuid
 import sys
 import collections
 
-from Utils import DatabaseWrap, Field
+from discord.ext import commands
+from typing import *
+from cairosvg import svg2png
+from Utils import *
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +31,6 @@ _Py_BaseMatchData = collections.namedtuple("MatchData",
                                            ("board", "white", "black",
                                             "difficulty", "match_id",
                                             "overwrites", "spectators", "creator"))
-
-QUESTION_EMOJI = "<:question:816429295005073419>"
-EXCLAMATION_EMOJI = "<:exclamation:816429295102328903> "
-CROSS_EMOJI = "<:cross:816429294501756928>"
-INFO_EMOJI = "<:4497_info:816429294774517810>"
-
-ONE_EMOJI = "<:1n:816740502342598676>"
-TWO_EMOJI = "<:2n:816740535905550366>"
-THREE_EMOJI = "<:3n:816740576292503582>"
-FOUR_EMOJI = "<:4n:816740620961579048>"
-FIVE_EMOJI = "<:5n:816740650002546729>"
 
 class MatchData(_Py_BaseMatchData):
     overwrites: dict

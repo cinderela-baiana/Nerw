@@ -3,6 +3,7 @@ import asyncio
 from discord.ext import commands
 import youtube_dl
 from Utils import HALF_HOUR_IN_SECS
+from errors import VideoDurationOutOfBounds
 
 youtube_dl.utils.bug_reports_message = lambda: ''
 
@@ -38,11 +39,15 @@ class YTDLSource(discord.PCMVolumeTransformer):
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda : youtube.extract_info(url=url, download=not stream))
+        data = await loop.run_in_executor(None, lambda : youtube.extract_info(url=url, download=False))
 
         if "entries" in data:
             # estamos com uma playlist, e vamos pegar só o primeiro vídeo.
             data = data["entries"][0]
+        if not stream:
+            if data["duration"] > HALF_HOUR_IN_SECS:
+                raise VideoDurationOutOfBounds
+            await loop.run_in_executor(None, lambda : youtube.download([url]))
 
         filename = data["url"] if stream else youtube.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
@@ -63,8 +68,8 @@ class Audio(commands.Cog):
         """
         async with ctx.typing():
             player = await YTDLSource.from_url(query, stream=True)
-            ctx.voice_client.play(player, after=lambda err : print(f"Erro no player: {err}"))
 
+            ctx.voice_client.play(player, after=lambda err : print(f"Erro no player: {err}"))
             self.client.currently_playing[ctx.guild.id] = player, ctx.author.id
 
         await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
@@ -82,13 +87,14 @@ class Audio(commands.Cog):
         estabilidade, ao custo de rapidez.
         """
         async with ctx.typing():
-            player = await YTDLSource.from_url(query)
-            if player.data["duration"] > HALF_HOUR_IN_SECS:
-                return await ctx.reply("Eu não posso e não vou reproduzir vídeos com mais de 30 minutos!")
+            try:
+                player = await YTDLSource.from_url(query)
+            except VideoDurationOutOfBounds:
+                return await ctx.reply("Eu não vou e não posso reproduzir vídeos " 
+                                       "com mais de 30 minutos, para isso, veja o comando `,play`.")
 
             ctx.voice_client.play(player, after=lambda err : print(f"Erro no player: {err}"))
             self.client.currently_playing[ctx.guild.id] = player, ctx.author.id
-
         await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
 
     @commands.command(aliases=["lv", "disconnect"])
