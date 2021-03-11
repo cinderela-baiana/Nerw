@@ -1,6 +1,7 @@
 from discord.ext import commands
 from PIL import Image, ImageFont, ImageDraw
 from typing import Optional
+
 import io
 import discord
 import aiohttp
@@ -15,6 +16,8 @@ def splitlen(string, per):
 class ImageCog(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
+
+        self._avatar_cache = {}
         self._mememan_bytes = None
 
     async def fetch_mememan(self):
@@ -100,6 +103,45 @@ class ImageCog(commands.Cog):
         with open("palette.png", "rb") as fp:
             file = discord.File(fp, "palette.png")
 
+        await ctx.reply(file=file)
+
+    @commands.command()
+    @commands.cooldown(1, 40, commands.BucketType.member)
+    async def marry(self, ctx, user: discord.User, other_user: Optional[discord.User]):
+        """
+        Casa com alguém.
+        """
+        async with ctx.typing():
+            if other_user is None:
+                other_user = user
+                user = ctx.author
+
+            image: Image.Image = Image.open("assets/facebook.png")
+            user_avatar: Image.Image = Image.open(io.BytesIO(await user.avatar_url.read()))
+            other_user_avatar: Image.Image = Image.open(io.BytesIO(await other_user.avatar_url.read()))
+
+            # o tamanho é um par de (largura,altura).
+            # a posição é um par de (coord. x, coord. y)
+            user_avatar = user_avatar.resize((534, 525))
+            other_user_avatar = other_user_avatar.resize((534, 525))
+            image.paste(user_avatar, (0,170))
+            image.paste(other_user_avatar, (544,171))
+
+            smol_user_avatar = Image.open(io.BytesIO(await user.avatar_url_as(format="png", size=64).read()))
+            smol_user_avatar.resize((77,78))
+            image.paste(smol_user_avatar, (56,35))
+
+            draw = ImageDraw.Draw(image)
+            font = ImageFont.truetype("assets/montserrat.ttf", 35)
+            big_font = ImageFont.truetype("assets/montserrat.ttf", 45)
+
+            draw.text((140, 45), f"{user.name} está com {other_user.name}.", (10,10,10), font=font)
+            draw.text((165, 784), f"Casou-se com {other_user.name}", (10,10,10), font=big_font)
+
+            image.save("fb.png")
+
+        with open("fb.png", "rb") as fp:
+            file = discord.File(fp, filename="facebook.png")
         await ctx.reply(file=file)
 
 def setup(client):
