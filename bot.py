@@ -132,6 +132,11 @@ async def wait_until_weekday(sy):
 
 load_all_extensions()
 
+try:
+    client.load_extension("jishaku")
+except (commands.ExtensionNotFound):
+    pass
+
 @tasks.loop(minutes=5)
 async def presence_setter():
     payload = next(activities)
@@ -295,9 +300,9 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(
             f"{ctx.author.mention} Pare. Pare imediatamente de executar este comando. Ainda faltam {int(round(error.retry_after, 0))}s para você "
-            "usar o comando novamente.", delete_after=5
+            "usar o comando novamente.", delete_after=error.retry_after
         )
-        await asyncio.sleep(5)
+        await asyncio.sleep(error.retry_after)
         await ctx.message.delete()
 
     elif isinstance(error, commands.MemberNotFound):
@@ -367,8 +372,10 @@ async def refqtn(ctx):
         return
 
     await qtnchan.edit(name=f"Qtn. de servidores: {len(client.guilds)}")
-    await ctx.message.add_reaction(emoji.emojize(":thumbsup:"))
-
+    scheme = []
+    for guild in client.guilds:
+        scheme.append(guild.name)
+    await ctx.reply("\n".join(scheme))
 
 @client.command()
 @commands.cooldown(2, 5, commands.BucketType.channel)

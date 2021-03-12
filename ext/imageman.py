@@ -1,11 +1,14 @@
-from discord.ext import commands
-from PIL import Image, ImageFont, ImageDraw
+﻿from discord.ext import commands
+from PIL import Image, ImageFont, ImageDraw, ImageOps
 from typing import Optional
+from twemoji_parser import TwemojiParser
 
 import io
 import discord
 import aiohttp
 import time
+import textwrap
+
 
 MEMEMAN_IMG = "https://i.ibb.co/4YmHZCm/cumm.png"
 FONT_LIMIT = 31 # depende muito da fonte e do tamanho usado.
@@ -36,15 +39,15 @@ class ImageCog(commands.Cog):
             image: Image.Image = Image.open(io.BytesIO(await self.fetch_mememan()))
 
             if len(text) > FONT_LIMIT:
-                text = "\n".join(splitlen(text, FONT_LIMIT))
+                fmttext = "\n".join(textwrap.wrap(text, width=FONT_LIMIT))
 
             # a gente vai soltar um JPG, e JPGs não suportam alpha.
             image = image.convert("RGB")
-            image_draw = ImageDraw.Draw(image)
-
             font = ImageFont.truetype("assets/coolvetica.ttf", 45)
+            parser = TwemojiParser(image)
+            await parser.draw_text((10,0), fmttext, fill=(10,10,10), font=font)
+            await parser.close()
 
-            image_draw.text((10,0), text, (10,10,10), font=font)
             image.save("mememan.jpg")
 
         with open("mememan.jpg", "rb") as file:
@@ -105,7 +108,14 @@ class ImageCog(commands.Cog):
 
         await ctx.reply(file=file)
 
-    @commands.command()
+    def _build_mask(self, image_applied: Image.Image):
+        mask = Image.open("assets/mask.png")
+        out = ImageOps.fit(image_applied, mask.size, centering=(0.5, 0.5))
+        out.putalpha(mask)
+
+        return out
+
+    @commands.command(aliases=["facebook"])
     @commands.cooldown(1, 40, commands.BucketType.member)
     async def marry(self, ctx, user: discord.User, other_user: Optional[discord.User]):
         """
@@ -119,6 +129,7 @@ class ImageCog(commands.Cog):
             image: Image.Image = Image.open("assets/facebook.png")
             user_avatar: Image.Image = Image.open(io.BytesIO(await user.avatar_url.read()))
             other_user_avatar: Image.Image = Image.open(io.BytesIO(await other_user.avatar_url.read()))
+            footer: Image.Image = Image.open("assets/facebook-footer.png")
 
             # o tamanho é um par de (largura,altura).
             # a posição é um par de (coord. x, coord. y)
@@ -126,18 +137,22 @@ class ImageCog(commands.Cog):
             other_user_avatar = other_user_avatar.resize((534, 525))
             image.paste(user_avatar, (0,170))
             image.paste(other_user_avatar, (544,171))
+            image.paste(footer, (-80, 600), footer)
 
             smol_user_avatar = Image.open(io.BytesIO(await user.avatar_url_as(format="png", size=64).read()))
-            smol_user_avatar.resize((77,78))
-            image.paste(smol_user_avatar, (56,35))
+            smol_user_avatar.resize((98,98))
+            smol_user_avatar = self._build_mask(smol_user_avatar)
+            image.paste(smol_user_avatar, (56,35), smol_user_avatar)
 
             draw = ImageDraw.Draw(image)
             font = ImageFont.truetype("assets/montserrat.ttf", 35)
             big_font = ImageFont.truetype("assets/montserrat.ttf", 45)
 
-            draw.text((140, 45), f"{user.name} está com {other_user.name}.", (10,10,10), font=font)
-            draw.text((165, 784), f"Casou-se com {other_user.name}", (10,10,10), font=big_font)
+            width, height = draw.textsize(f"Casou-se com {other_user.name}", font=big_font)
 
+            marry_text_position = ((image.width - width) / 2, 784)
+            draw.text((160, 45), f"{user.name} está com {other_user.name}.", (10,10,10), font=font)
+            draw.text(marry_text_position, f"Casou-se com {other_user.name}", (10,10,10), font=big_font)
             image.save("fb.png")
 
         with open("fb.png", "rb") as fp:
