@@ -39,13 +39,13 @@ class ImageCog(commands.Cog):
             image: Image.Image = Image.open(io.BytesIO(await self.fetch_mememan()))
 
             if len(text) > FONT_LIMIT:
-                fmttext = "\n".join(textwrap.wrap(text, width=FONT_LIMIT))
+                text = "\n".join(textwrap.wrap(text, width=FONT_LIMIT))
 
             # a gente vai soltar um JPG, e JPGs não suportam alpha.
             image = image.convert("RGB")
             font = ImageFont.truetype("assets/coolvetica.ttf", 45)
             parser = TwemojiParser(image)
-            await parser.draw_text((10,0), fmttext, fill=(10,10,10), font=font)
+            await parser.draw_text((10,0), text, fill=(10,10,10), font=font)
             await parser.close()
 
             image.save("mememan.jpg")
