@@ -1,6 +1,5 @@
 ﻿import chess
 import discord
-import asyncio
 import random
 import emoji
 import logging
@@ -327,91 +326,95 @@ class Chess(commands.Cog):
         client = self.client
         self._create_table()
 
-        if ctx.author.id not in alias.keys() and ctx.author.id not in alias.values():
-            if userplayer != ctx.author: #and userplayer != client.user.id:
-                if userplayer != "computador" and isinstance(userplayer, discord.Member):
-                    mensagem = await ctx.send(f'Ok, agora aguarde que o usuário {userplayer.mention} reaja à esta mensagem.')
-                    await mensagem.add_reaction("👍")
-                    def checkreaction(reaction, user):
-                        return user == userplayer and str(reaction.emoji)  == '👍' and reaction.message == mensagem
-                    try:
-                        reaction, user = await client.wait_for("reaction_add",
-                                                               check=checkreaction,
-                                                               timeout=120)
+        if ctx.author.id in alias.keys() and ctx.author.id in alias.values():
+            return await ctx.reply(f'{CROSS_EMOJI} Você já tem uma partida em andamento.')
 
-                    except asyncio.TimeoutError:
-                        return
-                    else:
-                        pass
+        if userplayer != ctx.author:  # and userplayer != client.user.id:
+            if userplayer != "computador" and isinstance(userplayer, discord.Member):
+                mensagem = await ctx.send(
+                    f'Ok, agora aguarde que o usuário {userplayer.mention} reaja à esta mensagem.')
+                await mensagem.add_reaction("👍")
 
-                mentions = f"{ctx.author.mention}"
-                dificuldade = 0
-                if userplayer != 'computador':
-                    mentions += f" {userplayer.mention} "
+                def checkreaction(reaction, user):
+                    return user == userplayer and str(reaction.emoji) == '👍' and reaction.message == mensagem
 
+                try:
+                    reaction, user = await client.wait_for("reaction_add",
+                                                           check=checkreaction,
+                                                           timeout=120)
+
+                except asyncio.TimeoutError:
+                    return
                 else:
-                    userplayer = ctx.me
-                    descpr = f"{ONE_EMOJI} - sou um bebê que não sabe jogar xadrez\n{TWO_EMOJI} - fácil\n{THREE_EMOJI} - médio\n{FOUR_EMOJI} - difícil \n{FIVE_EMOJI} - hardicori"
-                    embed = discord.Embed(title=f"{QUESTION_EMOJI} Escolha a dificuldade", description=descpr, color=discord.Color.from_rgb(240,240,240))
-                    reamsg = await ctx.send(embed=embed)
+                    pass
 
-                    emjtup = (ONE_EMOJI, TWO_EMOJI, THREE_EMOJI, FOUR_EMOJI, FIVE_EMOJI)
-                    for emj in emjtup:
-                        await reamsg.add_reaction(emj)
+            mentions = f"{ctx.author.mention}"
+            dificuldade = 0
+            if userplayer != 'computador':
+                mentions += f" {userplayer.mention} "
 
-                    def check(reaction: discord.Reaction, user: discord.Member):
+            else:
+                userplayer = ctx.me
+                descpr = f"{ONE_EMOJI} - sou um bebê que não sabe jogar xadrez\n{TWO_EMOJI} - fácil\n{THREE_EMOJI} - médio\n{FOUR_EMOJI} - difícil \n{FIVE_EMOJI} - hardicori"
+                embed = discord.Embed(title=f"{QUESTION_EMOJI} Escolha a dificuldade", description=descpr,
+                                      color=discord.Color.from_rgb(240, 240, 240))
+                reamsg = await ctx.send(embed=embed)
 
-                        return user.id == ctx.author.id and str(reaction.emoji) in emjtup
+                emjtup = (ONE_EMOJI, TWO_EMOJI, THREE_EMOJI, FOUR_EMOJI, FIVE_EMOJI)
+                for emj in emjtup:
+                    await reamsg.add_reaction(emj)
 
-                    try:
-                        reaction, user = await client.wait_for("reaction_add",
-                                                        check=check,
-                                                        timeout=30.0)
-                    except asyncio.TimeoutError:
-                        return
-                    else:
-                        mapping = {
-                            ONE_EMOJI: 0, # fácinho
-                            TWO_EMOJI: 5, # fácil
-                            THREE_EMOJI: 10, # médio
-                            FOUR_EMOJI: 15, # difícil
-                            FIVE_EMOJI: 20 # hardicori
-                        }
-                        dificuldade = mapping[str(reaction.emoji)]
+                def check(reaction: discord.Reaction, user: discord.Member):
 
-                data = self._create_match_id(ctx.author, userplayer)
-                rdm = random.randint(1, 2)
+                    return user.id == ctx.author.id and str(reaction.emoji) in emjtup
 
-                if rdm == 1:
-                    black = userplayer.id
-                    white = ctx.author.id
+                try:
+                    reaction, user = await client.wait_for("reaction_add",
+                                                           check=check,
+                                                           timeout=30.0)
+                except asyncio.TimeoutError:
+                    return
                 else:
-                    white = userplayer.id
-                    black = ctx.author.id
+                    mapping = {
+                        ONE_EMOJI: 0,  # fácinho
+                        TWO_EMOJI: 5,  # fácil
+                        THREE_EMOJI: 10,  # médio
+                        FOUR_EMOJI: 15,  # difícil
+                        FIVE_EMOJI: 20  # hardicori
+                    }
+                    dificuldade = mapping[str(reaction.emoji)]
 
-                alias[ctx.author.id] = ctx.author.id # compatibilidade
-                alias[userplayer.id] = userplayer.id
-                cct = chess.Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
-                brd[ctx.author.id] = MatchData(board=cct, white=white,
-                                               black=black, difficulty=dificuldade,
-                                               match_id=data, overwrites=None, spectators=set(),
-                                               creator=ctx.author.id)
+            data = self._create_match_id(ctx.author, userplayer)
+            rdm = random.randint(1, 2)
 
-                channel = await self.create_channel(ctx, userplayer, match_id=data)
-                board : chess.Board = brd[ctx.author.id].board
+            if rdm == 1:
+                black = userplayer.id
+                white = ctx.author.id
+            else:
+                white = userplayer.id
+                black = ctx.author.id
 
-                if board.turn == chess.WHITE:
-                    color = "branco"
-                elif board.turn == chess.BLACK:
-                    color = "preto"
+            alias[ctx.author.id] = ctx.author.id  # compatibilidade
+            alias[userplayer.id] = userplayer.id
+            cct = chess.Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
+            brd[ctx.author.id] = MatchData(board=cct, white=white,
+                                           black=black, difficulty=dificuldade,
+                                           match_id=data, overwrites=None, spectators=set(),
+                                           creator=ctx.author.id)
 
-                await channel.send(f"{mentions} Que os jogos comecem!")
-                await channel.send(f"Você ({ctx.author}) é o {color}")
-                await self.imageboard(ctx, brd[alias[ctx.author.id]].board)
+            channel = await self.create_channel(ctx, userplayer, match_id=data)
+            board: chess.Board = brd[ctx.author.id].board
 
-                logger.info("Nova partida de xadrez criada. (ID -> %s)", data)
-        else:
-            await ctx.reply(f'{CROSS_EMOJI} Você já tem uma partida em andamento.')
+            if board.turn == chess.WHITE:
+                color = "branco"
+            elif board.turn == chess.BLACK:
+                color = "preto"
+
+            await channel.send(f"{mentions} Que os jogos comecem!")
+            await channel.send(f"Você ({ctx.author}) é o {color}")
+            await self.imageboard(ctx, brd[alias[ctx.author.id]].board)
+
+            logger.info("Nova partida de xadrez criada. (ID -> %s)", data)
 
     async def create_channel(self, ctx, userplayer, *, match_id=None):
         """

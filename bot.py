@@ -304,41 +304,22 @@ async def on_command_error(ctx, error):
         )
         await asyncio.sleep(error.retry_after)
         await ctx.message.delete()
-
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send(
-            f"{ctx.author.mention} usuário não encontrado.", delete_after=5)
+        await ctx.send(f"{ctx.author.mention} usuário não encontrado.", delete_after=5)
         await ctx.message.delete()
-
     elif isinstance(error, commands.CommandNotFound):
-        pass
-
-    elif isinstance(error, (discord.Forbidden, commands.BotMissingPermissions)):
-        embed = discord.Embed(title="Houve um erro ao executar o comando!",
-                              description=f"O comando `{ctx.command.name}` finalizou prematuramente"
-                                          " devido a minha falta de permissões. \nVerifique se eu tenho"
-                                          " as permissões e hierarquia de cargos corretas e tente novamente.",
-                              color=discord.Color.greyple())
-
-        if hasattr(error, "code"):  # discord.Forbbiden
-            embed.set_footer(text=f"Código do erro: **{error.code}**")
-        elif hasattr(error, "missing_perms"):  # commands.BotMissingPermissions
-            missing = ", ".join(error.missing_perms)
-            embed.set_footer(text=f"Permissões faltando: **{missing}**")
-
-        await ctx.send(ctx.author.mention, embed=embed)
-
+        return
+    elif isinstance(error, commands.BotMissingPermissions):
+        missing = ", ".join(map(lambda perm : "`perm`", error.missing_perms))
+        await ctx.reply(f"{ctx.author.mention} Eu não tenho a(s) permissão(ões) {missing}")
     elif isinstance(error, commands.MissingRequiredArgument):
         command = client.get_command("help")
         await ctx.invoke(command, cmd=ctx.command.name)
-
     elif isinstance(error, commands.DisabledCommand):
         await ctx.reply(f"Desculpe, mas o comando **{ctx.command.qualified_name}** está temporariamente desabilitado.")
-
     elif isinstance(error, commands.MissingPermissions):
         missing = ", ".join(error.missing_perms)
         await ctx.reply(f"Você não tem as seguintes permissões: `{missing}`")
-
     elif isinstance(error, UserBlacklisted):
         async with create_async_database("main.db") as connection:
             reason = await connection.get_item("blacklisteds", f"user_id = {ctx.author.id}", "reason")
@@ -348,10 +329,8 @@ async def on_command_error(ctx, error):
                 reason = "Nenhum..."
 
         await ctx.reply(f"Saia, você entrou pra lista negra. Motivo: **{reason}**")
-
     elif isinstance(error, commands.NotOwner):
         await ctx.reply("Este comando está reservado apenas para pessoas especiais. :3")
-
     else:
         traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
         descr = f"```{type(error).__name__}: {error}```"
@@ -476,9 +455,9 @@ async def setchannel(ctx, channel: Optional[discord.TextChannel]):
         await db.create_table_if_absent("default_channels", fields=fields)
         db._cursor.execute("INSERT INTO default_channels(guild, channel) VALUES (?,?)", (ctx.guild.id, ctx.channel.id))
         db._connection.commit()
-        await ctx.channel.send(embed=discord.Embed(
-            description='Canal {} adicionado como canal principal de respostas!'.format(channel.mention),
-            color=0xff0000))
+    await ctx.channel.send(embed=discord.Embed(
+        description='Canal {} adicionado como canal principal de respostas!'.format(channel.mention),
+        color=0xff0000))
 
 @client.command(hidden=True)
 @commands.is_owner()

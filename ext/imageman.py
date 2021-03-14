@@ -157,7 +157,37 @@ class ImageCog(commands.Cog):
 
         with open("fb.png", "rb") as fp:
             file = discord.File(fp, filename="facebook.png")
-        await ctx.reply(file=file)
+        return await ctx.reply(file=file)
+
+    @commands.command()
+    async def sus(self, ctx, *, text: str):
+          async with ctx.typing():
+                limitfont = 19
+                limittext = 72
+                txtlen = len(text)/5
+                fontsize = int(100 - txtlen)
+                if len(text) < limittext:
+                      if len(text) > FONT_LIMIT:
+                          text = "\n".join(textwrap.wrap(text, width=limitfont))
+                      image: Image.Image = Image.open("assets/sus.jpg")
+                      font = ImageFont.truetype("assets/amongus.ttf", fontsize)
+                      bounding_box = [613, 15, 1095, 295]
+                      draw = ImageDraw.Draw(image)
+
+                      x1, y1, x2, y2 = bounding_box
+                      w, h = draw.textsize(text, font=font)
+                      x = (x2 - x1 - w)/2 + x1
+                      y = (y2 - y1 - h)/2 + y1
+
+                      draw.text((x, y), text, (199,120,10),  align='center',
+                                font=font, stroke_width = 3, stroke_fill = (256,256,256))
+
+                      image.save("sustinho.png")
+                      with open("sustinho.png", "rb") as file:
+                          timm = str(round(time.time()))
+                          await ctx.reply(file=discord.File(file, filename=timm + ".png"))
+                else:
+                    await ctx.reply(f"Textão demais seloco, diminui isso aí pra {limittext} caracteres")
 
 def setup(client):
     client.add_cog(ImageCog(client))
