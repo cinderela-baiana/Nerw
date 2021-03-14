@@ -1,0 +1,23 @@
+[
+  {
+    "content": "Hoje é dia de sugestão! Cada pessoa poderá enviar uma sugestão de tema para o vídeo de **lista**!",
+    "weekday": [2,3,4],
+    "channel": 790661190174507018,
+    "guild": 553823031009607685,
+    "role": 790656053792079903
+  },
+  {
+    "content": "Hoje é dia de votação! Em breve vocês poderão votar nos temas para o vídeo!",
+    "weekday": 5,
+    "channel": 790661190174507018,
+    "guild": 553823031009607685,
+    "role": 790656053792079903
+  },
+  {
+    "content": "Hoje é dia de discussão do **tema escolhido!**\nEnviem opiniões, sugestões e qualquer coisa que possa nos ajudar à produzir o vídeo da lista.\nO ideal é que cada um envie um item que deveria estar na lista e o porquê",
+    "weekday": [6,0,1],
+    "channel": 790661190174507018,
+    "guild": 553823031009607685,
+    "role": 790656053792079903
+  }
+]
