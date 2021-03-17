@@ -16,7 +16,7 @@ FONT_LIMIT = 31 # depende muito da fonte e do tamanho usado.
 def splitlen(string, per):
     return [string[i : i + per] for i in range(0, len(string), per)]
 
-class ImageCog(commands.Cog):
+class ImageCog(commands.Cog, name="Imagens"):
     def __init__(self, client: commands.Bot):
         self.client = client
 

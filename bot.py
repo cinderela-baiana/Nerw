@@ -9,9 +9,8 @@ import traceback
 import sys
 import psutil
 import humanize
-import datetime
 import platform
-import random
+
 if sys.version_info >= (3, 9):
     # uma gambiarra pra corrigir um bug no SQLAlchemy.
     import time
@@ -30,7 +29,7 @@ humanize.i18n.activate("pt_BR")
 logging.basicConfig(level=logging.INFO)
 
 intents = discord.Intents.all()
-intents.typing = True
+intents.typing = False
 intents.integrations = False
 
 # evita do bot mencionar everyone e cargos
@@ -47,9 +46,6 @@ with open("config/activities.json") as fp:
     activities = cycle(json.load(fp))
 with open('config/credentials.yaml') as t:
     credentials = yaml.load(t)
-with open("assets/says.json", encoding="utf-8") as js:
-    says = cycle(json.load(js))
-can_use_says = True
 
 def is_canary():
     return credentials.get("ENVIROMENT", "CANARY") == "CANARY"
@@ -76,59 +72,6 @@ def get_all_extensions(*, folder=None):
     for file in filt:
         r = f"{folder}.{file.replace('.py', '')}"
         yield r
-
-@tasks.loop(hours=24)
-async def dispatch_say():
-    async with create_async_database("main.db") as db:
-        await db.create_table_if_absent("says_verf", (
-            Field(name="day", type="INTEGER"),
-            Field(name="month", type="INTEGER"),
-            Field(name="year", type="INTEGER")
-        ))
-        dates = await db.get_item("says_verf", fetchall=True)
-    try:
-       day, month, year = dates[len(dates) - 1]
-    except IndexError:
-        day, month, year = 0, 0, 0
-    now = datetime.datetime.now()
-    if (day, month, year) == (now.day, now.month, now.year):
-        return
-
-    sy = next(says)
-    result = await wait_until_weekday(sy)
-    if result:
-        now = datetime.datetime.now()
-        async with create_async_database("main.db") as db:
-            await db._cursor.execute("INSERT INTO says_verf(day,month,year) VALUES(?,?,?)",
-                               (now.day, now.month, now.year))
-
-async def wait_until_weekday(sy):
-    if is_canary():
-        dispatch_say.stop()
-        return False
-
-    now = datetime.datetime.now()
-    if isinstance(sy["weekday"], list):
-        condition = now.weekday() in sy["weekday"]
-    else:
-        condition = now.weekday() == sy["weekday"]
-
-    if condition:
-        should_mention = sy.get("should_mention", True)
-        allowed = None
-        guild = client.get_guild(sy["guild"])
-        channel = guild.get_channel(sy["channel"])
-
-        content = sy["content"]
-
-        if should_mention:
-            allowed = discord.AllowedMentions(roles=True)
-            role = guild.get_role(sy["role"])
-            content = f"{role.mention} {content}"
-
-        await channel.send(content, allowed_mentions=allowed)
-        return True
-    return False
 
 load_all_extensions()
 
@@ -165,9 +108,7 @@ async def on_ready():
     if not hasattr(client, "chat_thread"):
         client.chat_thread = ChatterThread()
         client.chat_thread.start()
-    if can_use_says:
-        dispatch_say.start()
-
+        
     client.last_statements = {}
     presence_setter.start()
     remove_snipes.start()
@@ -176,7 +117,6 @@ async def on_ready():
 async def on_disconnect():
     presence_setter.stop()
     client.chat_thread.close()
-    dispatch_say.stop()
     remove_snipes.stop()
 
 @client.event

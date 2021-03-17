@@ -1,8 +1,8 @@
-﻿from discord.ext import commands, tasks, menus
-from PIL import Image, ImageDraw
+﻿from discord.ext import commands, menus
 from geopy.geocoders import Nominatim
 from typing import *
 from chatter_thread import ChatterThread
+from ShazamAPI import Shazam
 
 import discord
 import asyncio
@@ -10,6 +10,7 @@ import random
 import humanize
 import datetime
 import aiohttp
+import yarl
 import yaml
 
 with open("config/credentials.yaml") as fp:
@@ -398,6 +399,35 @@ class Misc(commands.Cog):
 
                 return await message.reply(f"Você demorou " + humanize.time.naturaldelta(tdelta,
                                                                                     minimum_unit="milliseconds"))
+
+    @commands.command()
+    @commands.cooldown(1, 18, commands.BucketType.member)
+    async def shazam(self, ctx, data: Optional[str]):
+        if data is None and not ctx.message.attachments:
+            cmd = self.client.get_command("help")
+            return await ctx.invoke(cmd, cmd=ctx.command.name)
+
+        if ctx.message.attachments:
+            data = ctx.message.attachments[0]
+            data = await data.read()
+        else:
+            url = yarl.URL(data)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as request:
+                    data = await request.read()
+
+        shaz = (await self._shazam(data))
+        print(shaz)
+        await ctx.reply(f"Essa música parece ser {shaz['text']}.")
+
+    async def _shazam(self, data: bytes):
+        shazam = Shazam(data)
+        loop = asyncio.get_event_loop()
+        for _, content in shazam.recognizeSong():
+            print(content)
+            content = content
+            break
+        return content
 
 def setup(client):
     client.add_cog(Misc(client))

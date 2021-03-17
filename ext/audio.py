@@ -55,7 +55,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
 class Audio(commands.Cog):
     def __init__(self, client):
         self.client = client
-        self.client.currently_playing = {}
+        self.currently_playing = {}
 
     @commands.command(aliases=["p", "pl"])
     @commands.cooldown(1, 15, commands.BucketType.member)
@@ -68,9 +68,14 @@ class Audio(commands.Cog):
         """
         async with ctx.typing():
             player = await YTDLSource.from_url(query, stream=True)
-
-            ctx.voice_client.play(player, after=lambda err : print(f"Erro no player: {err}"))
-            self.client.currently_playing[ctx.guild.id] = player, ctx.author.id
+            try:
+                ctx.voice_client.play(player, after=lambda err : print(f"Erro no player: {err}"))
+            except AttributeError:
+                # pode ser meio raro, mas esse bloco é executado
+                # quando alguém usa o ,leave enquanto o bot pega
+                # as informações de alguma música.
+                return
+            self.currently_playing[ctx.guild.id] = player, ctx.author.id
 
         await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
 
@@ -94,7 +99,7 @@ class Audio(commands.Cog):
                                        "com mais de 30 minutos, para isso, veja o comando `,play`.")
 
             ctx.voice_client.play(player, after=lambda err : print(f"Erro no player: {err}"))
-            self.client.currently_playing[ctx.guild.id] = player, ctx.author.id
+            self.currently_playing[ctx.guild.id] = player, ctx.author.id
         await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
 
     @commands.command(aliases=["lv", "disconnect"])
@@ -119,6 +124,24 @@ class Audio(commands.Cog):
                 return await ctx.reply("Você não está conectado em um canal de voz.")
         elif ctx.voice_client.is_playing():
             ctx.voice_client.stop()
+
+    @commands.command()
+    async def pause(self, ctx):
+        if ctx.author in ctx.voice_client.channel.members:
+            if not ctx.voice_client.is_playing():
+                return await ctx.reply("Eu não estou reproduzindo nada.")
+            ctx.voice_client.pause()
+            await ctx.reply("Música pausada.")
+
+    @commands.command()
+    async def resume(self, ctx):
+        if ctx.author in ctx.voice_client.channel.members:
+            if ctx.voice_client.is_playing():
+                return await ctx.reply("Eu já estou reproduzindo algo.")
+            ctx.voice_client.resume()
+            await ctx.reply("Música retomada.")
+
+
 
 def setup(client):
     client.add_cog(Audio(client))

@@ -11,6 +11,7 @@ import warnings
 import uuid
 import sys
 import collections
+import functools
 
 from discord.ext import commands
 from typing import *
@@ -108,7 +109,7 @@ def _get_executable_suffix():
         return ".exe"
     return ""
 
-class Chess(commands.Cog):
+class Chess(commands.Cog, name="Xadrez"):
 
     def __init__(self, client):
         logger.info("Carregando engine do xadrez")
@@ -121,6 +122,8 @@ class Chess(commands.Cog):
         self._wins = None
         self.engine = chess.engine.SimpleEngine.popen_uci(file)
         logger.info("engine do xadrez carregada!")
+
+        self.configurations = {}
 
     def cog_unload(self):
         self.engine.close()
@@ -238,6 +241,9 @@ class Chess(commands.Cog):
             ov[black] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
         if white is not None:
             ov[white] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        await channel.edit(overwrites=ov)
+        match_data.add_spectator(ctx.author)
+        await ctx.reply(f"O chat de xadrez é o {channel.mention}")
 
         match_data.set_overwrites(ov)
         await channel.edit(overwrites=ov)
@@ -254,7 +260,7 @@ class Chess(commands.Cog):
             blackuser = ctx.guild.get_member(match.black)
             whiteuser = ctx.guild.get_member(match.white)
             scheme.append(f"{match.match_id} - {blackuser} vs. {whiteuser}")
-        if scheme == []:
+        if not scheme:
             scheme.append(f"{EXCLAMATION_EMOJI} Nenhuma partida...")
 
         await ctx.reply(embed=discord.Embed(title="Partidas disponíveis",
@@ -461,18 +467,20 @@ class Chess(commands.Cog):
 
         svg2png(bytestring=a, write_to='outputboard.png')
         file = discord.File('outputboard.png')
-
-        embed = discord.Embed(color=ctx.guild.me.color)
-
-        embed.set_image(url="attachment://outputboard.png")
-        embed.set_footer(text="Utilize ,xadrez <coordenada inicial> <coordenada final> para jogar."
-                              "\nUtilize `,xadfi` para desistir.")
-
-        await channel.send(file=file, embed=embed)
         if not tab.is_game_over():
             turn = self.turn(ctx)
+            if turn != ctx.me:
+                embed = discord.Embed(color=ctx.guild.me.color)
+
+                embed.set_image(url="attachment://outputboard.png")
+                embed.set_footer(text="Utilize ,xadrez <coordenada inicial> <coordenada final> para jogar."
+                                      "\nUtilize `,xadfi` para desistir.")
+
+                await channel.send(file=file, embed=embed)
+
             if tab.is_check():
                 await channel.send('https://cdn.discordapp.com/attachments/597071381586378752/796947748401446952/ezgif-2-9143b9b40c89.gif')
+
             turn = ctx.guild.get_member(turn)
             await channel.send(f'É a vez de {turn.mention}')
             if turn == ctx.me:
@@ -480,9 +488,12 @@ class Chess(commands.Cog):
                     for _ in range(0, 15):
                         try:
                             diff = brd[alias[ctx.author.id]].difficulty
-                            result = self.engine.play(tab, chess.engine.Limit(time=3), options={'Skill Level': diff})
+
+                            result = \
+                                await self._play(tab, chess.engine.Limit(time=3), options={'Skill Level': diff})
                             tab.push(result.move)
                             await self.imageboard(ctx, tab, result.move)
+
                             break
                         except:
                             continue
@@ -508,6 +519,13 @@ class Chess(commands.Cog):
                                     description= 'GG, peguem seus troféus de empate')
             await channel.send(embed=embed)
             await self.end_match(ctx)
+
+    async def _play(self, *args, **kwargs) -> chess.engine.PlayResult:
+        partial = functools.partial(self.engine.play, *args, **kwargs)
+        loop = asyncio.get_event_loop()
+        future = await loop.run_in_executor(None, partial)
+
+        return await future
 
     async def end_match(self, ctx, winner=None):
         # lógica compartilhada quando uma partida é encerrada.

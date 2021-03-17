@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import discord
 
-class Help(commands.Cog):
+class Help(commands.Cog, name="Ajuda"):
     def __init__(self, client: commands.Bot):
         self.client = client
 
@@ -53,16 +53,15 @@ class Help(commands.Cog):
             color = ctx.me.color
 
         if cmd is None:
-            appinfo = await self.client.application_info()
-            filt = filter(lambda command : not command.hidden, self.client.commands)
-            cmds = list(map(lambda command : f"`{command.name}`", filt))
-            all_commands = " | ".join(cmds)
-
             permissions = discord.Permissions(administrator=True)
             url = discord.utils.oauth_url(self.client.user.id, permissions)
-            eb = discord.Embed(description=all_commands, color=color)
+            eb = discord.Embed(color=color)
             eb.set_author(name="Me convide para o seu servidor!", url=url)
 
+            appinfo = await self.client.application_info()
+            filt = filter(lambda command : not command.hidden, self.client.commands)
+            eb.description = " | ".join(map(lambda command: f"`{command}"))
+            
             if ctx.author.id in list(map(lambda user : user.id, appinfo.team.members)):
                 filt = filter(lambda command: command.hidden, self.client.commands)
                 cmds = list(map(lambda command: f"`{command.name}`", filt))
