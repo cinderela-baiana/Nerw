@@ -60,7 +60,7 @@ class Help(commands.Cog, name="Ajuda"):
 
             appinfo = await self.client.application_info()
             filt = filter(lambda command : not command.hidden, self.client.commands)
-            eb.description = " | ".join(map(lambda command: f"`{command}"))
+            eb.description = " | ".join(map(lambda command: f"`{command.name}", filt))
             
             if ctx.author.id in list(map(lambda user : user.id, appinfo.team.members)):
                 filt = filter(lambda command: command.hidden, self.client.commands)
@@ -82,7 +82,10 @@ class Help(commands.Cog, name="Ajuda"):
                 await ctx.reply(f"Não existe nenhum comando com o nome **{cmd}**.")
                 return
             else:
-                await ctx.reply(embed=hlp)
+                try:
+                    await ctx.reply(embed=hlp)
+                except UnboundLocalError:
+                    return await ctx.reply(f"Não existe nenhum comando com o nome **{cmd}**.")
 
 def setup(client):
     client.add_cog(Help(client))
