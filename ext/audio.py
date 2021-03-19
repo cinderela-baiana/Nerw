@@ -1,10 +1,11 @@
 import discord
 import asyncio
+import ext.imageman
 from discord.ext import commands
 import youtube_dl
 from Utils import HALF_HOUR_IN_SECS
 from errors import VideoDurationOutOfBounds
-
+import aiohttp
 youtube_dl.utils.bug_reports_message = lambda: ''
 
 ytdl_format_options = {
@@ -35,7 +36,8 @@ class YTDLSource(discord.PCMVolumeTransformer):
         
         self.title = data.get('title')
         self.url = data.get('url')
-
+        self.thumb = data.get('thumbnail')
+        self.id = data.get('id')
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
@@ -50,12 +52,21 @@ class YTDLSource(discord.PCMVolumeTransformer):
             await loop.run_in_executor(None, lambda : youtube.download([url]))
 
         filename = data["url"] if stream else youtube.prepare_filename(data)
-        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data), data
 
 class Audio(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.currently_playing = {}
+
+    def search_yt(self, query):
+        with youtube_dl.YoutubeDL({'format': 'bestaudio', 'noplaylist':'True'}) as ydl:
+            if query.startswith("www.") or query.startswith("https:"):
+                info = ydl.extract_info(query, download=False)
+            else:
+                info = ydl.extract_info("ytsearch:{}".format(query), download=False)['entries'][0]
+            video, thumb = (info, info['thumbnail'])
+            return thumb
 
     @commands.command(aliases=["p", "pl"])
     @commands.cooldown(1, 15, commands.BucketType.member)
@@ -67,7 +78,13 @@ class Audio(commands.Cog):
         rapidez ao carregar a música, mas ao custo de estabilidade.
         """
         async with ctx.typing():
-            player = await YTDLSource.from_url(query, stream=True)
+            attempt = 0
+            while attempt is not 2:
+                try:
+                    player, data = await YTDLSource.from_url(query, stream=True)
+                    break
+                except:
+                    attempt = attempt + 1
             try:
                 ctx.voice_client.play(player, after=lambda err : print(f"Erro no player: {err}"))
             except AttributeError:
@@ -76,8 +93,14 @@ class Audio(commands.Cog):
                 # as informações de alguma música.
                 return
             self.currently_playing[ctx.guild.id] = player, ctx.author.id
-
-        await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
+            thumb = data.get('thumbnail')
+            print(thumb)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(thumb) as request:
+                    thumbread = await request.read()
+            colors = ext.imageman.ImageCog.get_colors(self, image=thumbread)
+            color = discord.Color.from_rgb(*colors[0])
+        await ctx.reply(embed= discord.Embed(title="Som na caixa!", description=f"Tocando: **{player.title}**", url=f'https://youtube.com/watch?v={data.get("id")}', color=color).set_image(url=thumb))
 
     @commands.command(name="playdownload", aliases=["pd", "pld"])
     @commands.cooldown(1, 15, commands.BucketType.member)
