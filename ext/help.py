@@ -60,7 +60,7 @@ class Help(commands.Cog, name="Ajuda"):
 
             appinfo = await self.client.application_info()
             filt = filter(lambda command : not command.hidden, self.client.commands)
-            eb.description = " | ".join(map(lambda command: f"`{command.name}", filt))
+            eb.description = " | ".join(map(lambda command: f"`{command.name}`", filt))
             
             if ctx.author.id in list(map(lambda user : user.id, appinfo.team.members)):
                 filt = filter(lambda command: command.hidden, self.client.commands)
