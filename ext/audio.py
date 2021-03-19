@@ -59,15 +59,6 @@ class Audio(commands.Cog):
         self.client = client
         self.currently_playing = {}
 
-    def search_yt(self, query):
-        with youtube_dl.YoutubeDL({'format': 'bestaudio', 'noplaylist':'True'}) as ydl:
-            if query.startswith("www.") or query.startswith("https:"):
-                info = ydl.extract_info(query, download=False)
-            else:
-                info = ydl.extract_info("ytsearch:{}".format(query), download=False)['entries'][0]
-            video, thumb = (info, info['thumbnail'])
-            return thumb
-
     @commands.command(aliases=["p", "pl"])
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def play(self, ctx, *, query: str):
