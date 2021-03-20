@@ -89,7 +89,7 @@ class Audio(commands.Cog):
             async with aiohttp.ClientSession() as session:
                 async with session.get(thumb) as request:
                     thumbread = await request.read()
-            colors = ext.imageman.ImageCog.get_colors(self, image=thumbread)
+            colors = self.client.get_cog("Imagens").get_colors(self, image=thumbread)
             color = discord.Color.from_rgb(*colors[0])
         await ctx.reply(embed= discord.Embed(title="Som na caixa!", description=f"Tocando: **{player.title}**", url=f'https://youtube.com/watch?v={data.get("id")}', color=color).set_image(url=thumb))
 
