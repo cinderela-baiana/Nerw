@@ -1,9 +1,11 @@
 import discord
 import asyncio
-from discord.ext import commands
 import youtube_dl
+
+from discord.ext import commands
 from Utils import HALF_HOUR_IN_SECS
 from errors import VideoDurationOutOfBounds
+from _audio import Playlist
 
 youtube_dl.utils.bug_reports_message = lambda: ''
 
@@ -32,14 +34,16 @@ class YTDLSource(discord.PCMVolumeTransformer):
         super().__init__(source, volume)
 
         self.data = data
-        
+
         self.title = data.get('title')
         self.url = data.get('url')
+        self.duration = data.get("duration")
+        self._current_duration = 0.0
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda : youtube.extract_info(url=url, download=False))
+        data = await loop.run_in_executor(None, lambda: youtube.extract_info(url=url, download=False))
 
         if "entries" in data:
             # estamos com uma playlist, e vamos pegar só o primeiro vídeo.
@@ -47,19 +51,51 @@ class YTDLSource(discord.PCMVolumeTransformer):
         if not stream:
             if data["duration"] > HALF_HOUR_IN_SECS:
                 raise VideoDurationOutOfBounds
-            await loop.run_in_executor(None, lambda : youtube.download([url]))
+            await loop.run_in_executor(None, lambda: youtube.download([url]))
 
         filename = data["url"] if stream else youtube.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
+    async def download(self, *, loop=None):
+        loop = loop or asyncio.get_event_loop()
+        future = await loop.run_in_executor(None, lambda: youtube.download([self.url]))
+        return await future
+
+    def read(self):
+        ret = super().read()
+        if ret:
+            self._current_duration += 1
+        return ret
+
+    @property
+    def current_duration(self):
+        return self._current_duration * .02
+
+    def ended(self, ctx):
+        return self.current_duration == self.duration or \
+            (ctx.voice_client.source == self and
+             not ctx.voice_client.is_playing())
+
 class Audio(commands.Cog):
+
     def __init__(self, client):
         self.client = client
         self.currently_playing = {}
+        self.queues = {}
+        self.loop = asyncio.get_event_loop()
+        self._condition = asyncio.Condition()
+
+    async def truncate_queue(self, ctx):
+        queue = self.queues[ctx.guild.id]
+
+        while queue.currently_playing.ended(ctx):
+            player, _ = queue.get_next_video()
+            if player:
+                ctx.voice_client.play(player)
 
     @commands.command(aliases=["p", "pl"])
     @commands.cooldown(1, 15, commands.BucketType.member)
-    async def play(self, ctx, *, query: str):
+    async def play(self, ctx: commands.Context, *, query: str):
         """Toca uma música via streaming.
 
         É mais recomendando usar esse comando no bot estável, já que
@@ -67,21 +103,38 @@ class Audio(commands.Cog):
         rapidez ao carregar a música, mas ao custo de estabilidade.
         """
         async with ctx.typing():
-            player = await YTDLSource.from_url(query, stream=True)
             try:
-                ctx.voice_client.play(player, after=lambda err : print(f"Erro no player: {err}"))
-            except AttributeError:
-                # pode ser meio raro, mas esse bloco é executado
-                # quando alguém usa o ,leave enquanto o bot pega
-                # as informações de alguma música.
-                return
-            self.currently_playing[ctx.guild.id] = player, ctx.author.id
+                player = await YTDLSource.from_url(query, stream=True)
+            except IndexError: # música não existe
+                return await ctx.reply(f"O termo ou URL não corresponde a nenhum vídeo." 
+                                       " Tenta usar termos mais vagos na próxima vez.")
+        try:
+            if not ctx.guild.voice_client.is_playing():
+                ctx.voice_client.play(player)
+
+            await self.queue_song(ctx, player)
+            await self.truncate_queue(ctx)
+        except AttributeError:
+            # pode ser meio raro, mas esse bloco é executado
+            # quando alguém usa o ,leave enquanto o bot pega
+            # as informações de alguma música.
+            return
 
         await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
 
+    async def queue_song(self, ctx, player):
+        if not isinstance(player, YTDLSource):
+            player = YTDLSource.from_url(player)
+
+        if self.queues.get(ctx.guild.id) is None:
+            self.queues[ctx.guild.id] = Playlist()
+
+        queue = self.queues[ctx.guild.id]
+        queue.add_video(player)
+
     @commands.command(name="playdownload", aliases=["pd", "pld"])
     @commands.cooldown(1, 15, commands.BucketType.member)
-    async def play_download(self, ctx, *, query : str):
+    async def play_download(self, ctx, *, query: str):
         """
         Toca uma música baixando ela. O tempo máximo para vídeos
         usando esse comando é de trinta minutos, para vídeos maiores,
@@ -95,10 +148,10 @@ class Audio(commands.Cog):
             try:
                 player = await YTDLSource.from_url(query)
             except VideoDurationOutOfBounds:
-                return await ctx.reply("Eu não vou e não posso reproduzir vídeos " 
+                return await ctx.reply("Eu não vou e não posso reproduzir vídeos "
                                        "com mais de 30 minutos, para isso, veja o comando `,play`.")
 
-            ctx.voice_client.play(player, after=lambda err : print(f"Erro no player: {err}"))
+            ctx.voice_client.play(player, after=lambda err: print(f"Erro no player: {err}"))
             self.currently_playing[ctx.guild.id] = player, ctx.author.id
         await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
 
@@ -140,7 +193,6 @@ class Audio(commands.Cog):
                 return await ctx.reply("Eu já estou reproduzindo algo.")
             ctx.voice_client.resume()
             await ctx.reply("Música retomada.")
-
 
 
 def setup(client):
