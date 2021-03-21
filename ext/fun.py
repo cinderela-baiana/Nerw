@@ -5,6 +5,7 @@ from chatter_thread import ChatterThread
 from ShazamAPI import Shazam
 
 import discord
+import subprocess
 import asyncio
 import random
 import humanize
@@ -400,26 +401,63 @@ class Misc(commands.Cog):
                 return await message.reply(f"Você demorou " + humanize.time.naturaldelta(tdelta,
                                                                                     minimum_unit="milliseconds"))
 
+    async def vidconvert(self, attachment):
+        ext = attachment.filename
+        ext = ext.split('.')[1]
+        await attachment.save(fp=f'a.{ext}')
+        command = f"ffmpeg -i a.{ext} -b:a 192K -vn output-audio.mp3 -y"
+        subprocess.call(command, shell=True)
+
+    @commands.command()
+    async def video2audio(self, ctx):
+        async with ctx.typing():
+            attachment = ctx.message.attachments[0]
+            await self.vidconvert(attachment=attachment)
+            with open("output-audio.mp3", "rb") as fp:
+                file = discord.File(fp, filename="output.mp3")
+            await ctx.reply(file=file)
+
+
     @commands.command()
     @commands.cooldown(1, 18, commands.BucketType.member)
     async def shazam(self, ctx, data: Optional[str]):
-        if data is None and not ctx.message.attachments:
-            cmd = self.client.get_command("help")
-            return await ctx.invoke(cmd, cmd=ctx.command.name)
+        async with ctx.typing():
+            try:
+                if data is None and not ctx.message.attachments:
+                    cmd = self.client.get_command("help")
+                    return await ctx.invoke(cmd, cmd=ctx.command.name)
 
-        if ctx.message.attachments:
-            data = ctx.message.attachments[0]
-            data = await data.read()
-        else:
-            url = yarl.URL(data)
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as request:
-                    data = await request.read()
+                if ctx.message.attachments:
+                    if not ctx.message.attachments[0].width == None:
+                        attachment = ctx.message.attachments[0]
+                        await self.vidconvert(attachment=attachment)
+                        with open("output-audio.mp3", "rb") as fp:
+                            data = fp.read()
+                    else:
+                        data = ctx.message.attachments[0]
+                        data = await data.read()
+                else:
+                    url = yarl.URL(data)
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url) as request:
+                            data = await request.read()
 
-        shaz = (await self._shazam(data))
-        print(shaz)
-        await ctx.reply(f"Essa música parece ser {shaz['text']}.")
+                shaz = (await self._shazam(data))
+                image = shaz['track']['images']['coverart']
+                youtube = shaz['track']['sections'][2]['youtubeurl']
+                async with aiohttp.ClientSession() as session:
+                    requesturl = await session.get(youtube)
+                    urljson = await requesturl.json()
+                    async with session.get(image) as request:
+                        imageread = await request.read()
+                url = urljson['actions'][0]['uri']
 
+                colors = self.client.get_cog("Imagens").get_colors(image=imageread)
+                color = discord.Color.from_rgb(*colors[0])
+                matches = shaz['track']['share']
+                await ctx.reply(embed = discord.Embed(title='Achei!~~(espero que esteja certo)~~', description= f"Essa música parece ser **{matches['subject']}**.",colour=color, url= url).set_image(url=image))
+            except:
+                await ctx.reply('Xiiiiiiiii, não achei a música.')
     async def _shazam(self, data: bytes):
         shazam = Shazam(data)
         loop = asyncio.get_event_loop()
