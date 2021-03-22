@@ -1,5 +1,15 @@
 import collections
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
+
+class _FakePlayer:
+    def ended(self, ctx):
+        return True
+
+    def __repr__(self):
+        return f"FakePlayer at 0x{id(self)}"
 
 class Playlist:
     def __init__(self):
@@ -17,12 +27,16 @@ class Playlist:
     def __bool__(self):
         return len(self) != 0
 
+    def __repr__(self):
+        return f"Playlist(items={self._deque})"
+
     def estimated_time(self):
         est = sum(map(lambda e: e.duration, self._deque))
         return est
 
     def add_video(self, source):
         self._deque.append(source)
+
         return source
 
     async def download_all_videos(self):
@@ -33,11 +47,20 @@ class Playlist:
 
     def get_next_video(self):
         if len(self) == 0:
-            return None, None # ajuda a evitar TypeErrors.
+            return None
 
         item = self._deque.popleft()
         return item
 
+    def clear(self):
+        self._deque.clear()
+
     @property
     def currently_playing(self):
-        return self._deque[0]
+        try:
+            return self._deque[0]
+        except IndexError:
+            return _FakePlayer()
+
+    def empty(self):
+        return len(self) == 0

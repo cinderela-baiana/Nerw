@@ -1,12 +1,14 @@
 import discord
 import asyncio
 import youtube_dl
+import logging
 
 from discord.ext import commands
 from Utils import HALF_HOUR_IN_SECS
 from errors import VideoDurationOutOfBounds
 from _audio import Playlist
 
+logger = logging.getLogger(__name__)
 youtube_dl.utils.bug_reports_message = lambda: ''
 
 ytdl_format_options = {
@@ -85,13 +87,15 @@ class Audio(commands.Cog):
         self.loop = asyncio.get_event_loop()
         self._condition = asyncio.Condition()
 
-    async def truncate_queue(self, ctx):
-        queue = self.queues[ctx.guild.id]
+    def truncate_queue(self, ctx):
+        if ctx.voice_client is None:
+            return
 
-        while queue.currently_playing.ended(ctx):
-            player, _ = queue.get_next_video()
-            if player:
-                ctx.voice_client.play(player)
+        queue = self.queues[ctx.guild.id]
+        player = queue.get_next_video()
+
+        if player is not None and ctx.voice_client.source is None:
+            ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
 
     @commands.command(aliases=["p", "pl"])
     @commands.cooldown(1, 15, commands.BucketType.member)
@@ -108,24 +112,14 @@ class Audio(commands.Cog):
             except IndexError: # música não existe
                 return await ctx.reply(f"O termo ou URL não corresponde a nenhum vídeo." 
                                        " Tenta usar termos mais vagos na próxima vez.")
-        try:
-            if not ctx.guild.voice_client.is_playing():
-                ctx.voice_client.play(player)
 
-            await self.queue_song(ctx, player)
-            await self.truncate_queue(ctx)
-        except AttributeError:
-            # pode ser meio raro, mas esse bloco é executado
-            # quando alguém usa o ,leave enquanto o bot pega
-            # as informações de alguma música.
-            return
+        if ctx.voice_client.source is None:
+            ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
+        self.queue_song(ctx, player)
 
         await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
 
-    async def queue_song(self, ctx, player):
-        if not isinstance(player, YTDLSource):
-            player = YTDLSource.from_url(player)
-
+    def queue_song(self, ctx, player):
         if self.queues.get(ctx.guild.id) is None:
             self.queues[ctx.guild.id] = Playlist()
 
