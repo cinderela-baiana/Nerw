@@ -9,6 +9,7 @@ import aiosqlite
 import contextlib
 import pathlib
 import asyncio
+import logging
 
 PathLike = Union[str, pathlib.Path]
 

@@ -18,15 +18,14 @@ if sys.version_info >= (3, 9):
 
 from typing import Optional
 from itertools import cycle
-from Utils import Field, create_async_database
+from Utils import Field, create_async_database, setup_logging
 from chatter_thread import ChatterThread
 from errors import UserBlacklisted
 from discord.ext import commands, tasks
 
+logging.basicConfig(level=logging.INFO)
 SYSTEM_ROOT = "/"
 humanize.i18n.activate("pt_BR")
-
-logging.basicConfig(level=logging.INFO)
 
 intents = discord.Intents.all()
 intents.typing = False

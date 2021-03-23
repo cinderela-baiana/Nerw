@@ -36,7 +36,6 @@ class Playlist:
 
     def add_video(self, source):
         self._deque.append(source)
-
         return source
 
     async def download_all_videos(self):
@@ -64,3 +63,12 @@ class Playlist:
 
     def empty(self):
         return len(self) == 0
+
+    def upcoming(self):
+        return self._deque[1:]
+
+    def __next__(self):
+        res = self.get_next_video()
+        if res is None:
+            raise StopIteration
+        return res

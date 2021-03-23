@@ -3,6 +3,7 @@ import asyncio
 import youtube_dl
 import logging
 
+from emoji import emojize
 from discord.ext import commands
 from Utils import HALF_HOUR_IN_SECS
 from errors import VideoDurationOutOfBounds
@@ -140,13 +141,15 @@ class Audio(commands.Cog):
         """
         async with ctx.typing():
             try:
-                player = await YTDLSource.from_url(query)
-            except VideoDurationOutOfBounds:
-                return await ctx.reply("Eu não vou e não posso reproduzir vídeos "
-                                       "com mais de 30 minutos, para isso, veja o comando `,play`.")
+                player = await YTDLSource.from_url(query, stream=False)
+            except IndexError: # música não existe
+                return await ctx.reply(f"O termo ou URL não corresponde a nenhum vídeo." 
+                                       " Tenta usar termos mais vagos na próxima vez.")
 
-            ctx.voice_client.play(player, after=lambda err: print(f"Erro no player: {err}"))
-            self.currently_playing[ctx.guild.id] = player, ctx.author.id
+        if ctx.voice_client.source is None:
+            ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
+        self.queue_song(ctx, player)
+
         await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
 
     @commands.command(aliases=["lv", "disconnect"])
@@ -155,9 +158,11 @@ class Audio(commands.Cog):
         """
         Sai do canal de voz atual.
         """
+        emoji = emojize(":eject_button:", use_aliases=True)
         voice_client = ctx.voice_client
         if voice_client:
             await voice_client.disconnect()
+            await ctx.message.add_reaction(emoji)
         else:
             await ctx.reply('Eu não estou em um canal de voz')
 
@@ -169,25 +174,43 @@ class Audio(commands.Cog):
                 await ctx.author.voice.channel.connect()
             else:
                 return await ctx.reply("Você não está conectado em um canal de voz.")
-        elif ctx.voice_client.is_playing():
-            ctx.voice_client.stop()
 
     @commands.command()
     async def pause(self, ctx):
+        emoji = emojize(":pause_button:", use_aliases=True)
         if ctx.author in ctx.voice_client.channel.members:
             if not ctx.voice_client.is_playing():
                 return await ctx.reply("Eu não estou reproduzindo nada.")
             ctx.voice_client.pause()
-            await ctx.reply("Música pausada.")
+            await ctx.message.add_reaction(emoji)
 
     @commands.command()
     async def resume(self, ctx):
+        emoji = emojize(":play_or_pause_button:", use_aliases=True)
         if ctx.author in ctx.voice_client.channel.members:
             if ctx.voice_client.is_playing():
                 return await ctx.reply("Eu já estou reproduzindo algo.")
             ctx.voice_client.resume()
-            await ctx.reply("Música retomada.")
+            await ctx.message.add_reaction(emoji)
 
+    @commands.command(name="queue")
+    async def get_queue(self, ctx):
+        try:
+            queue = self.queues[ctx.guild.id]
+        except KeyError:
+            return await ctx.reply("Não existe nenhuma fila de músicas nesse servidor..\n"
+                                   "Tente adicionar músicas usando o comando `,play`.")
+
+        scheme = []
+        i = 0
+        for video in queue:
+            i += 1
+            scm = f"{i}. {video.title} - {video.duration}"
+            if i == 1:
+                scm += " **(Atualmente reproduzindo)**"
+            scheme.append(scm)
+        del i
+        await ctx.reply("\n".join(scheme))
 
 def setup(client):
     client.add_cog(Audio(client))
