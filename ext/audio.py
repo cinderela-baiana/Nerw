@@ -27,7 +27,8 @@ ytdl_format_options = {
 }
 
 ffmpeg_options = {
-    'options': '-vn'
+    'options': '-vn',
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
 }
 
 youtube = youtube_dl.YoutubeDL(ytdl_format_options)
@@ -161,10 +162,11 @@ class Audio(commands.Cog):
         emoji = emojize(":eject_button:", use_aliases=True)
         voice_client = ctx.voice_client
         if voice_client:
+            del self.queues[ctx.guild.id]
             await voice_client.disconnect()
-            await ctx.message.add_reaction(emoji)
-        else:
-            await ctx.reply('Eu não estou em um canal de voz')
+            return await ctx.message.add_reaction(emoji)
+
+        await ctx.reply('Eu não estou em um canal de voz')
 
     @play.before_invoke
     @play_download.before_invoke
