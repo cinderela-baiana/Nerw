@@ -96,7 +96,7 @@ class Audio(commands.Cog):
         queue = self.queues[ctx.guild.id]
         player = queue.get_next_video()
 
-        if player is not None and ctx.voice_client.source is None:
+        if player is not None:
             ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
 
     @commands.command(aliases=["p", "pl"])
