@@ -60,6 +60,17 @@ class ImageCog(commands.Cog, name="Imagens"):
         image = Image.open(image)
 
         image = image.copy()
+        image = image.convert("RGBA")
+        datas = image.getdata()
+
+        newData = []
+        for item in datas:
+            if item[0] <= 10 and item[1] <= 10 and item[2] <= 10:
+                newData.append((0, 0, 0, 0))
+            else:
+                newData.append(item)
+
+        image.putdata(newData)
         image.thumbnail((resize, resize))
 
         palt = image.convert("P", palette=Image.ADAPTIVE, colors=colors)
@@ -70,7 +81,6 @@ class ImageCog(commands.Cog, name="Imagens"):
         for c in range(len(colors) + 1):
             palette_index = color_counts[c][1]
             dominant_color = palette[palette_index*3:palette_index*3+3]
-
             colors.append(tuple(dominant_color))
 
         return colors
@@ -160,6 +170,7 @@ class ImageCog(commands.Cog, name="Imagens"):
         return await ctx.reply(file=file)
 
     @commands.command()
+    @commands.cooldown(1, 30, commands.BucketType.member)
     async def sus(self, ctx, *, text: str):
           async with ctx.typing():
                 limitfont = 19
@@ -187,7 +198,49 @@ class ImageCog(commands.Cog, name="Imagens"):
                           timm = str(round(time.time()))
                           await ctx.reply(file=discord.File(file, filename=timm + ".png"))
                 else:
-                    await ctx.reply(f"Textão demais seloco, diminui isso aí pra {limittext} caracteres")
+                    await ctx.reply(f"Mucho texto, diminui isso aí pra {limittext} caracteres")
 
+    @commands.command()
+    @commands.cooldown(1, 30, commands.BucketType.member)
+    async def xvidros(self, ctx, *, text: str):
+        async with ctx.typing():
+            fontlimit = 34
+            textlimit = 65
+            if len(text) < textlimit:
+                try:
+                    if len(text) > fontlimit:
+                        text = "\n".join(textwrap.wrap(text, width=fontlimit))
+                    xvop = Image.open("assets/xvop.png")
+                    image: Image.Image = Image.open("assets/xividio.png")
+                    font = ImageFont.truetype("assets/robotobold.ttf", 90)
+                    font2 = ImageFont.truetype("assets/robotobold.ttf", 60)
+                    draw = ImageDraw.Draw(image)
+                    attread = await  ctx.message.attachments[0].read()
+                    att = Image.open(io.BytesIO(attread))
+                    att = att.resize((1377, 865))
+                    # l              draw.rectangle([40, 278, 700, 380], fill = (10,10,10)
+                    parser = TwemojiParser(image)
+                    bounding_box = [40, 278, 700, 380]
+                    x1, y1, x2, y2 = bounding_box
+                    username = ctx.author.name
+                    w, h = draw.textsize(username, font=font2)
+                    x = (x2 - x1 - w) / 2 + x1
+                    y = (y2 - y1 - h) / 2 + y1
+
+                    draw.text((x, y), username, (256, 256, 256), align='center', font=font2)
+                    await parser.draw_text((40, 60), text, fill=(10, 10, 10), font=font)
+                    await parser.close()
+                    draw.rectangle([33, 525, 1410, 1390], fill=(20, 156, 89))
+                    image.paste(att, (33, 525, 1410, 1390))
+                    image.paste(xvop, (40, 1200), xvop)
+                    # 1377,865
+                    image.save("xividio.png")
+                    with open("xividio.png", "rb") as fp:
+                        file = discord.File(fp, filename="xvidros.png")
+                    await ctx.reply(file=file)
+                except IndexError:
+                    await ctx.reply("Cadê a imagem mano????????")
+            else:
+                await ctx.reply(f"Mucho texto, diminui isso aí pra {textlimit} caracteres")
 def setup(client):
     client.add_cog(ImageCog(client))

@@ -118,9 +118,18 @@ class Audio(commands.Cog):
         if ctx.voice_client.source is None:
             ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
         self.queue_song(ctx, player)
+        thumb = data.get('thumbnail')
 
-        await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
-
+        async with aiohttp.ClientSession() as session:
+            async with session.get(thumb) as request:
+                thumbread = await request.read()
+                
+        colors = self.client.get_cog("Imagens").get_colors(image=thumbread)
+        color = discord.Color.from_rgb(*colors[0])
+        embed = discord.Embed(title="Som na caixa!", description=f"Ouvido e Tocando: **{player.title}**", url=f'https://youtube.com/watch?v={data.get("id")}', color=color)
+        embed.set_image(url=thumb)                             
+        await ctx.reply(embed=embed)
+                              
     def queue_song(self, ctx, player):
         if self.queues.get(ctx.guild.id) is None:
             self.queues[ctx.guild.id] = Playlist()
@@ -142,7 +151,7 @@ class Audio(commands.Cog):
         """
         async with ctx.typing():
             try:
-                player = await YTDLSource.from_url(query, stream=False)
+                player = await YTDLSource.from_url(query)
             except IndexError: # música não existe
                 return await ctx.reply(f"O termo ou URL não corresponde a nenhum vídeo." 
                                        " Tenta usar termos mais vagos na próxima vez.")
@@ -150,9 +159,18 @@ class Audio(commands.Cog):
         if ctx.voice_client.source is None:
             ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
         self.queue_song(ctx, player)
+        thumb = data.get('thumbnail')
 
-        await ctx.reply(f"Ouvindo e tocando: **{player.title}**")
-
+        async with aiohttp.ClientSession() as session:
+            async with session.get(thumb) as request:
+                thumbread = await request.read()
+                
+        colors = self.client.get_cog("Imagens").get_colors(image=thumbread)
+        color = discord.Color.from_rgb(*colors[0])
+        embed = discord.Embed(title="Som na caixa!", description=f"Ouvido e Tocando: **{player.title}**", url=f'https://youtube.com/watch?v={data.get("id")}', color=color)
+        embed.set_image(url=thumb)                             
+        await ctx.reply(embed=embed)
+                              
     @commands.command(aliases=["lv", "disconnect"])
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def leave(self, ctx):
