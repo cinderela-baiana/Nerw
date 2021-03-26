@@ -4,13 +4,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class _FakePlayer:
-    def ended(self, ctx):
-        return True
-
-    def __repr__(self):
-        return f"FakePlayer at 0x{id(self)}"
-
 class Playlist:
     def __init__(self):
         self._deque = collections.deque()
@@ -59,7 +52,7 @@ class Playlist:
         try:
             return self._deque[0]
         except IndexError:
-            return _FakePlayer()
+            return None
 
     def empty(self):
         return len(self) == 0

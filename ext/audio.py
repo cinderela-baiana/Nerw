@@ -2,12 +2,14 @@ import discord
 import asyncio
 import youtube_dl
 import logging
+import aiohttp
 
 from emoji import emojize
 from discord.ext import commands
 from Utils import HALF_HOUR_IN_SECS
 from errors import VideoDurationOutOfBounds
 from _audio import Playlist
+from Utils import CROSS_EMOJI
 
 logger = logging.getLogger(__name__)
 youtube_dl.utils.bug_reports_message = lambda: ''
@@ -94,6 +96,9 @@ class Audio(commands.Cog):
             return
 
         queue = self.queues[ctx.guild.id]
+        print("truncate")
+        # filename = youtube.prepare_filename(queue.currently_playing.data)
+
         player = queue.get_next_video()
 
         if player is not None:
@@ -114,7 +119,7 @@ class Audio(commands.Cog):
             except IndexError: # música não existe
                 return await ctx.reply(f"O termo ou URL não corresponde a nenhum vídeo." 
                                        " Tenta usar termos mais vagos na próxima vez.")
-
+        data = player.data
         if ctx.voice_client.source is None:
             ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
         self.queue_song(ctx, player)
@@ -159,6 +164,7 @@ class Audio(commands.Cog):
         if ctx.voice_client.source is None:
             ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
         self.queue_song(ctx, player)
+        data = player.data
         thumb = data.get('thumbnail')
 
         async with aiohttp.ClientSession() as session:
@@ -191,9 +197,12 @@ class Audio(commands.Cog):
     async def ensure_voice(self, ctx):
         if ctx.voice_client is None:
             if ctx.author.voice:
-                await ctx.author.voice.channel.connect()
+                channel = ctx.author.voice.channel
+                permissions = channel.permissions_for(ctx.me)
+                if not permissions.connect:
+                    return await ctx.reply(f"{CROSS_EMOJI} Eu não tenho permissão para conectar a este canal.")
             else:
-                return await ctx.reply("Você não está conectado em um canal de voz.")
+                return await ctx.reply(f"{CROSS_EMOJI} Você não está conectado em um canal de voz.")
 
     @commands.command()
     async def pause(self, ctx):
