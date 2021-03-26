@@ -48,9 +48,9 @@ class ImageCog(commands.Cog, name="Imagens"):
             await parser.draw_text((10,0), text, fill=(10,10,10), font=font)
             await parser.close()
 
-            image.save("mememan.jpg")
+            image.save("CacheAttachment/mememan.jpg")
 
-        with open("mememan.jpg", "rb") as file:
+        with open("CacheAttachment/mememan.jpg", "rb") as file:
             timm = str(round(time.time()))
             await ctx.reply(file=discord.File(file, filename=timm + ".jpg"))
 
@@ -163,9 +163,9 @@ class ImageCog(commands.Cog, name="Imagens"):
             marry_text_position = ((image.width - width) / 2, 784)
             draw.text((160, 45), f"{user.name} está com {other_user.name}.", (10,10,10), font=font)
             draw.text(marry_text_position, f"Casou-se com {other_user.name}", (10,10,10), font=big_font)
-            image.save("fb.png")
+            image.save("CacheAttachment/fb.png")
 
-        with open("fb.png", "rb") as fp:
+        with open("CacheAttachment/fb.png", "rb") as fp:
             file = discord.File(fp, filename="facebook.png")
         return await ctx.reply(file=file)
 
@@ -193,8 +193,8 @@ class ImageCog(commands.Cog, name="Imagens"):
                       draw.text((x, y), text, (199,120,10),  align='center',
                                 font=font, stroke_width = 3, stroke_fill = (256,256,256))
 
-                      image.save("sustinho.png")
-                      with open("sustinho.png", "rb") as file:
+                      image.save("CacheAttachment/sustinho.png")
+                      with open("CacheAttachment/sustinho.png", "rb") as file:
                           timm = str(round(time.time()))
                           await ctx.reply(file=discord.File(file, filename=timm + ".png"))
                 else:
@@ -207,39 +207,40 @@ class ImageCog(commands.Cog, name="Imagens"):
             fontlimit = 34
             textlimit = 65
             if len(text) < textlimit:
+                if len(text) > fontlimit:
+                    text = "\n".join(textwrap.wrap(text, width=fontlimit))
+                xvop = Image.open("assets/xvop.png")
+                image: Image.Image = Image.open("assets/xividio.png")
+                font = ImageFont.truetype("assets/robotobold.ttf", 90)
+                font2 = ImageFont.truetype("assets/robotobold.ttf", 60)
+                draw = ImageDraw.Draw(image)
                 try:
-                    if len(text) > fontlimit:
-                        text = "\n".join(textwrap.wrap(text, width=fontlimit))
-                    xvop = Image.open("assets/xvop.png")
-                    image: Image.Image = Image.open("assets/xividio.png")
-                    font = ImageFont.truetype("assets/robotobold.ttf", 90)
-                    font2 = ImageFont.truetype("assets/robotobold.ttf", 60)
-                    draw = ImageDraw.Draw(image)
-                    attread = await  ctx.message.attachments[0].read()
-                    att = Image.open(io.BytesIO(attread))
-                    att = att.resize((1377, 865))
-                    # l              draw.rectangle([40, 278, 700, 380], fill = (10,10,10)
-                    parser = TwemojiParser(image)
-                    bounding_box = [40, 278, 700, 380]
-                    x1, y1, x2, y2 = bounding_box
-                    username = ctx.author.name
-                    w, h = draw.textsize(username, font=font2)
-                    x = (x2 - x1 - w) / 2 + x1
-                    y = (y2 - y1 - h) / 2 + y1
-
-                    draw.text((x, y), username, (256, 256, 256), align='center', font=font2)
-                    await parser.draw_text((40, 60), text, fill=(10, 10, 10), font=font)
-                    await parser.close()
-                    draw.rectangle([33, 525, 1410, 1390], fill=(20, 156, 89))
-                    image.paste(att, (33, 525, 1410, 1390))
-                    image.paste(xvop, (40, 1200), xvop)
-                    # 1377,865
-                    image.save("xividio.png")
-                    with open("xividio.png", "rb") as fp:
-                        file = discord.File(fp, filename="xvidros.png")
-                    await ctx.reply(file=file)
+                    attread = await ctx.message.attachments[0].read()
                 except IndexError:
-                    await ctx.reply("Cadê a imagem mano????????")
+                    return await ctx.send("Cadê a imagem mano????")
+                att = Image.open(io.BytesIO(attread))
+                att = att.resize((1377, 865))
+                # l              draw.rectangle([40, 278, 700, 380], fill = (10,10,10)
+                parser = TwemojiParser(image)
+                bounding_box = [40, 278, 700, 380]
+                x1, y1, x2, y2 = bounding_box
+                username = ctx.author.name
+                w, h = draw.textsize(username, font=font2)
+                x = (x2 - x1 - w) / 2 + x1
+                y = (y2 - y1 - h) / 2 + y1
+
+                draw.text((x, y), username, (256, 256, 256), align='center', font=font2)
+                await parser.draw_text((40, 60), text, fill=(10, 10, 10), font=font)
+                await parser.close()
+                draw.rectangle([33, 525, 1410, 1390], fill=(20, 156, 89))
+                image.paste(att, (33, 525, 1410, 1390))
+                image.paste(xvop, (40, 1200), xvop)
+                # 1377,865
+                image.save("CacheAttachment/xividio.png")
+
+                with open("CacheAttachment/xividio.png", "rb") as fp:
+                    file = discord.File(fp, filename="xvidros.png")
+                await ctx.reply(file=file)
             else:
                 await ctx.reply(f"Mucho texto, diminui isso aí pra {textlimit} caracteres")
 def setup(client):
