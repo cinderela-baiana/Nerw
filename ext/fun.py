@@ -4,6 +4,7 @@ from typing import *
 from chatter_thread import ChatterThread
 from ShazamAPI import Shazam
 
+from icrawler.builtin import GoogleImageCrawler
 import discord
 import subprocess
 import asyncio
@@ -13,6 +14,7 @@ import datetime
 import aiohttp
 import yarl
 import yaml
+import os
 
 with open("config/credentials.yaml") as fp:
     apitempo = yaml.load(fp)["OPENSTREETMAP_KEY"]
@@ -458,6 +460,7 @@ class Misc(commands.Cog):
                 await ctx.reply(embed = discord.Embed(title='Achei!~~(espero que esteja certo)~~', description= f"Essa música parece ser **{matches['subject']}**.",colour=color, url= url).set_image(url=image))
             except:
                 await ctx.reply('Xiiiiiiiii, não achei a música.')
+
     async def _shazam(self, data: bytes):
         shazam = Shazam(data)
         loop = asyncio.get_event_loop()
@@ -466,6 +469,21 @@ class Misc(commands.Cog):
             content = content
             break
         return content
+
+    @commands.command(name="img")
+    async def imgsearch(self, ctx, *, query: str):
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._crawl, query)
+        file = discord.File("CacheAttachment/000001.jpg")
+
+        await ctx.reply(file=file)
+        os.remove("CacheAttachment/000001.jpg")
+
+    # a implementação real do comando img.
+    # ela só existe pra ser usado no loop.run_in_executor.
+    def _crawl(self, content: str):
+        crawler = GoogleImageCrawler(storage={"root_dir": "./CacheAttachment"})
+        crawler.crawl(content, max_num=1)
 
 def setup(client):
     client.add_cog(Misc(client))
