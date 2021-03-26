@@ -1,11 +1,12 @@
 from discord.ext import commands
 from typing import Optional
 from copy import deepcopy
-
+import bot
 import discord
 
 class Help(commands.Cog, name="Ajuda"):
     def __init__(self, client: commands.Bot):
+        self.prefix = bot.get_prefix()
         self.client = client
 
     def get_command_help(self, ctx, command):
@@ -43,25 +44,44 @@ class Help(commands.Cog, name="Ajuda"):
     def get_hidden_commands(self):
         return list(filter(lambda command : command.enabled, self.client.commands))
 
-    @commands.command(name="help")
+    @commands.command(name="helpall")
     async def _help(self, ctx, *, cmd: Optional[str]):
-        """Mostra essa mensagem."""
-
         if isinstance(ctx.me, discord.ClientUser):
             color = discord.Color.from_rgb(230, 0, 0)
         else:
             color = ctx.me.color
+        permissions = discord.Permissions(administrator=True)
+        url = discord.utils.oauth_url(self.client.user.id, permissions)
+        eb = discord.Embed(color=color)
+        eb.set_author(name="Me convide para o seu servidor!", url=url)
+
+        filt = filter(lambda command: not command.hidden, self.client.commands)
+        eb.description = " | ".join(map(lambda command: f"`{command.name}`", filt))
+
+    @commands.command(name="help")
+    async def _help(self, ctx, *, cmd: Optional[str]):
+        """Mostra essa mensagem."""
 
         if cmd is None:
             permissions = discord.Permissions(administrator=True)
             url = discord.utils.oauth_url(self.client.user.id, permissions)
-            eb = discord.Embed(color=color)
-            eb.set_author(name="Me convide para o seu servidor!", url=url)
-
+            if bot.is_canary():
+                eb = discord.Embed(color=0x04c312)
+            else:
+                eb = discord.Embed(color=0xed0467)
+            eb.description = f"Prefixo no servidor: `{self.prefix}`"
+            eb.set_author(name="Clique aqui para me adicionar ao seu servidor!", url=url, icon_url= self.client.user.avatar_url)
+            eb.add_field(name="**Diversão:**", value="enviar | chatbot | selfmute | banrandom | snipe | kickrandom | textão | oibot", inline=False)
+            eb.add_field(name="**Música:**", value="play | pause | leave | resume | queue | playdownload ",
+                            inline=False)
+            eb.add_field(name="**Utilidades:**",
+                            value="shazam | ban | nick | botinfo | domin | kick | mover_mensagem | ping | tempo | invite",
+                            inline=False)
+            eb.add_field(name="**Imagens:**", value=" sus | marry | mememan | xvidros", inline=False)
+            eb.add_field(name="**Xadrez:**", value="xadrez_iniciar | xadrez_rank | xadrez | xadrez_espectar\n⠀⠀⠀⠀⠀⠀⠀",
+                            inline=False)
+            eb.set_footer(text=f"Use {self.prefix}help <comando> para mais informações.")
             appinfo = await self.client.application_info()
-            filt = filter(lambda command : not command.hidden, self.client.commands)
-            eb.description = " | ".join(map(lambda command: f"`{command.name}`", filt))
-            
             if ctx.author.id in list(map(lambda user : user.id, appinfo.team.members)):
                 filt = filter(lambda command: command.hidden, self.client.commands)
                 cmds = list(map(lambda command: f"`{command.name}`", filt))

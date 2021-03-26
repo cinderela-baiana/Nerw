@@ -18,7 +18,7 @@ if sys.version_info >= (3, 9):
 
 from typing import Optional
 from itertools import cycle
-from Utils import Field, create_async_database, setup_logging
+from Utils import Field, create_async_database
 from chatter_thread import ChatterThread
 from errors import UserBlacklisted
 from discord.ext import commands, tasks
@@ -49,11 +49,13 @@ with open('config/credentials.yaml') as t:
 def is_canary():
     return credentials.get("ENVIROMENT", "CANARY") == "CANARY"
 
-prefix = credentials.get("PREFIXO")
-if is_canary():
-    prefix = credentials.get("CANARY_PREFIX")
+def get_prefix():
+    prefix = credentials.get("PREFIXO")
+    if is_canary():
+        prefix = credentials.get("CANARY_PREFIX")
+    return prefix
 
-client = commands.Bot(command_prefix=commands.when_mentioned_or(prefix), case_insensitive=True,
+client = commands.Bot(command_prefix=commands.when_mentioned_or(get_prefix()), case_insensitive=True,
                       intents=intents, allowed_mentions=allowed_mentions)
 snipes = {}
 client.remove_command("help")
