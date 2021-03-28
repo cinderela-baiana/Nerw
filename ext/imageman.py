@@ -8,6 +8,8 @@ import discord
 import aiohttp
 import time
 import textwrap
+import requests
+import os
 
 
 MEMEMAN_IMG = "https://i.ibb.co/4YmHZCm/cumm.png"
@@ -31,7 +33,18 @@ class ImageCog(commands.Cog, name="Imagens"):
             async with session.get(MEMEMAN_IMG) as request:
                 self._mememan_bytes = await request.read()
                 return self._mememan_bytes
+    @commands.command()
+    @commands.cooldown(1, 15, commands.BucketType.member)
+    async def tpdne(self, ctx):
+        pickImage=requests.get('https://thispersondoesnotexist.com/image')
 
+
+        with open("ResultTPDNE.jpeg","wb") as result:
+        pickImage.encoding = 'utf-8'
+        result.write(pickImage.content)
+        result.close()
+        await ctx.reply(file=discord.File(result, filename="Resultado"))
+        
     @commands.command()
     @commands.cooldown(1, 30, commands.BucketType.member)
     async def mememan(self, ctx, *, text: str):
