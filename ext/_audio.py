@@ -27,8 +27,8 @@ class Playlist:
         est = sum(map(lambda e: e.duration, self._deque))
         return est
 
-    def add_video(self, source , data):
-        self._deque.append({source: data})
+    def add_video(self, source):
+        self._deque.append(source)
         return source
 
     async def download_all_videos(self):
@@ -45,7 +45,6 @@ class Playlist:
         return item
 
     def clear(self):
-        print("clear")
         self._deque.clear()
 
     @property
@@ -57,6 +56,13 @@ class Playlist:
 
     def empty(self):
         return len(self) == 0
+
+    def put(self, at: int, what):
+        if len(self) > at:
+            raise IndexError
+
+        self._deque.insert(at, what)
+        return what
 
     def upcoming(self):
         return self._deque[1:]

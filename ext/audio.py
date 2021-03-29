@@ -36,6 +36,7 @@ ffmpeg_options = {
 
 youtube = youtube_dl.YoutubeDL(ytdl_format_options)
 
+
 class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5):
         super().__init__(source, volume)
@@ -83,6 +84,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             (ctx.voice_client.source == self and
              not ctx.voice_client.is_playing())
 
+
 class Audio(commands.Cog):
 
     def __init__(self, client):
@@ -90,28 +92,27 @@ class Audio(commands.Cog):
         self.currently_playing = None
         self.queues = {}
         self.loop = asyncio.get_event_loop()
-        self._condition = asyncio.Condition()
 
     def truncate_queue(self, ctx):
         try:
             if ctx.voice_client is None:
                 return
             queue = self.queues[ctx.guild.id]
-            nextvideo = queue.get_next_video()
-            player = list(nextvideo.keys())[0]
-            data = list(nextvideo.values())[0]
-            asyncio.create_task(self.embed(ctx, data, player, playing=True))
+            player = queue.get_next_video()
+            data = player.data
             self.currently_playing = player
             if player is not None:
                 ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
+            asyncio.create_task(self.embed(ctx, data, player, playing=True))
         except AttributeError:
             self.currently_playing = None
 
-    async def in_voice_channel(self, ctx):
+    @staticmethod
+    async def in_voice_channel(ctx):
         """checa se o autor do comando está no canal de voz do bot"""
         voice = ctx.author.voice
         bot_voice = ctx.guild.voice_client
-        if not bot_voice == None:
+        if bot_voice:
             if voice and bot_voice and voice.channel and bot_voice.channel and voice.channel == bot_voice.channel:
                 return True
             else:
@@ -128,11 +129,11 @@ class Audio(commands.Cog):
         vai ter menos chances de bufferings e travadas. Você ganha
         rapidez ao carregar a música, mas ao custo de estabilidade.
         """
-        if await self.in_voice_channel(ctx) == True:
+        if await self.in_voice_channel(ctx):
             async with ctx.typing():
                 try:
                     player, data = await YTDLSource.from_url(query, stream=True)
-                except IndexError: # música não existe
+                except IndexError:
                     return await ctx.reply(f"O termo ou URL não corresponde a nenhum vídeo." 
                                            " Tenta usar termos mais vagos na próxima vez.")
             self.queue_song(ctx, player, data)
@@ -141,8 +142,7 @@ class Audio(commands.Cog):
             else:
                 await self.embed(ctx, data, player)
 
-
-    async def embed(self, ctx, data, player, playing = False):
+    async def embed(self, ctx, data, player, playing=False):
         thumb = data.get('thumbnail')
         async with aiohttp.ClientSession() as session:
             async with session.get(thumb) as request:
@@ -150,18 +150,24 @@ class Audio(commands.Cog):
         colors = self.client.get_cog("Imagens").get_colors(image=thumbread)
         color = discord.Color.from_rgb(*colors[0])
         if playing:
-            embed = discord.Embed(title="Som na caixa!", description=f"Ouvido e Tocando: **{player.title}**", url=f'https://youtube.com/watch?v={data.get("id")}', color=color)
+            embed = discord.Embed(title="Som na caixa!",
+                                  description=f"Ouvido e Tocando: **{player.title}**",
+                                  url=f'https://youtube.com/watch?v={data.get("id")}',
+                                  color=color)
         else:
-            embed = discord.Embed(title="Som na caixa!", description=f"Adicionado na fila: **{player.title}**", url=f'https://youtube.com/watch?v={data.get("id")}', color=color)
+            embed = discord.Embed(title="Som na caixa!",
+                                  description=f"Adicionado na fila: **{player.title}**",
+                                  url=f'https://youtube.com/watch?v={data.get("id")}',
+                                  color=color)
         embed.set_image(url=thumb)
         await ctx.send(embed=embed)
 
-    def queue_song(self, ctx, player, data):
+    def queue_song(self, ctx, player, *args):
         if self.queues.get(ctx.guild.id) is None:
             self.queues[ctx.guild.id] = Playlist()
 
         queue = self.queues[ctx.guild.id]
-        queue.add_video(player, data)
+        queue.add_video(player)
 
     @commands.command(name="playdownload", aliases=["pd", "pld"])
     @commands.cooldown(1, 15, commands.BucketType.member)
@@ -178,7 +184,7 @@ class Audio(commands.Cog):
         async with ctx.typing():
             try:
                 player, data = await YTDLSource.from_url(query, stream=False)
-            except IndexError: # música não existe
+            except IndexError:
                 return await ctx.reply(f"O termo ou URL não corresponde a nenhum vídeo." 
                                        " Tenta usar termos mais vagos na próxima vez.")
 
@@ -200,7 +206,7 @@ class Audio(commands.Cog):
                 emoji = emojize(":eject_button:", use_aliases=True)
                 queue = self.queues[ctx.guild.id]
                 queue.clear()
-                del queue
+                del self.queues[ctx.guild.id]
                 self.currently_playing = None
                 await voice_client.disconnect()
                 return await ctx.message.add_reaction(emoji)
@@ -252,21 +258,22 @@ class Audio(commands.Cog):
     async def get_queue(self, ctx):
         try:
             queue = self.queues[ctx.guild.id]
-            scheme = []
             scm = f"1. {self.currently_playing.title} - {self.currently_playing.duration}"
-            scm += " **(Atualmente reproduzindo)**"
-            scheme.append(scm)
-            i = 1
-            for video in queue:
-                video = list(video.keys())[0]
-                i += 1
-                scm = f"{i}. {video.title} - {video.duration}"
-                scheme.append(scm)
-            del i
-            await ctx.reply("\n".join(scheme))
-        except:
+        except Exception:
             return await ctx.reply("Não existe nenhuma fila de músicas nesse servidor.\n"
                                    "Tente adicionar músicas usando o comando `,play`.")
+        scheme = []
+        scm += " **(Atualmente reproduzindo)**"
+        scheme.append(scm)
+        i = 1
+        for video in queue:
+            video = list(video.keys())[0]
+            i += 1
+            scm = f"{i}. {video.title} - {video.duration}"
+            scheme.append(scm)
+        del i
+        await ctx.reply("\n".join(scheme))
+
 
 def setup(client):
     client.add_cog(Audio(client))
