@@ -4,13 +4,22 @@ import youtube_dl
 import logging
 import aiohttp
 import time
+import yaml
 
 from emoji import emojize
-from discord.ext import commands
+from discord.ext import commands, menus
 from Utils import HALF_HOUR_IN_SECS
 from errors import VideoDurationOutOfBounds
 from ext._audio import Playlist
 from Utils import CROSS_EMOJI
+from recommender.api import Recommender
+
+
+with open("config/credentials.yaml") as fp:
+    credentials = yaml.safe_load(fp)
+
+spotifyid = credentials["SPOTIFY_CLIENT_ID"]
+spotifysecret = credentials["SPOTIFY_SECRET"]
 
 logger = logging.getLogger(__name__)
 youtube_dl.utils.bug_reports_message = lambda: ''
@@ -102,6 +111,7 @@ class Audio(commands.Cog):
             data = player.data
             self.currently_playing = player
             if player is not None:
+                time.sleep(5)
                 ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
             asyncio.create_task(self.embed(ctx, data, player, playing=True))
         except AttributeError:
@@ -112,13 +122,17 @@ class Audio(commands.Cog):
         """checa se o autor do comando está no canal de voz do bot"""
         voice = ctx.author.voice
         bot_voice = ctx.guild.voice_client
-        if bot_voice:
-            if voice and bot_voice and voice.channel and bot_voice.channel and voice.channel == bot_voice.channel:
-                return True
+        try:
+            if voice:
+                if voice.channel == bot_voice.channel:
+                    return True
+                else:
+                    await ctx.reply(f"{CROSS_EMOJI} Você precisa estar no mesmo "
+                                    f"canal de voz que o bot para fazer isso.")
             else:
-                await ctx.reply(f"{CROSS_EMOJI} Você precisa estar no mesmo canal de voz que o bot para fazer isso.")
-        else:
-            pass
+                await ctx.send(f"{CROSS_EMOJI} Você não está conectado em um canal de voz.")
+        except AttributeError:
+            await ctx.send(f"{CROSS_EMOJI} Eu não estou em um canal de voz.")
 
     @commands.command(aliases=["p", "pl"])
     @commands.cooldown(1, 5, commands.BucketType.member)
@@ -224,8 +238,6 @@ class Audio(commands.Cog):
                     await ctx.author.voice.channel.connect()
                 else:
                     return await ctx.reply(f"{CROSS_EMOJI} Eu não tenho permissão para conectar a este canal.")
-            else:
-                return await ctx.reply(f"{CROSS_EMOJI} Você não está conectado em um canal de voz.")
 
     @commands.command()
     async def pause(self, ctx):
@@ -258,7 +270,7 @@ class Audio(commands.Cog):
     async def get_queue(self, ctx):
         try:
             queue = self.queues[ctx.guild.id]
-            scm = f"1. {self.currently_playing.title} - {self.currently_playing.duration}"
+            scm = f"**1. {self.currently_playing.title} - {self.currently_playing.duration}**"
         except Exception:
             return await ctx.reply("Não existe nenhuma fila de músicas nesse servidor.\n"
                                    "Tente adicionar músicas usando o comando `,play`.")
@@ -267,12 +279,64 @@ class Audio(commands.Cog):
         scheme.append(scm)
         i = 1
         for video in queue:
-            video = list(video.keys())[0]
             i += 1
             scm = f"{i}. {video.title} - {video.duration}"
             scheme.append(scm)
         del i
         await ctx.reply("\n".join(scheme))
+
+    class Musicrecommend(menus.Menu):
+        def __init__(self, ctx, artists, client):
+            super().__init__()
+            self.client = client
+            self.artists = artists
+            self.ctx = ctx
+            self.list = list
+            self.index = 0
+
+        async def send_initial_message(self, ctx, channel):
+            self.list = await self.get_recommendation()
+            embed = discord.Embed(color=0xed0467, title="Recomendação:", description=self.list[0])
+            return await ctx.reply(embed=embed)
+
+        async def get_recommendation(self):
+            recommender = Recommender(client_id=spotifyid,
+                                      client_secret=spotifysecret)
+            recommender.tracks = self.artists
+            recommendations = recommender.find_recommendations()
+            recommendlist = []
+            for recommendation in recommendations['tracks']:
+                recommendation = "%s - %s" % (recommendation['name'], recommendation['artists'][0]['name'])
+                recommendlist.append(recommendation)
+            return recommendlist
+
+        @menus.button('<:left:826199958939500605>')
+        async def on_left(self, payload):
+            if self.index > 0:
+                self.index -= 1
+            embed = discord.Embed(color=0xed0467, title="Recomendação:", description=self.list[self.index])
+            await self.message.edit(embed=embed)
+
+        @menus.button(':right:826200020935639081')
+        async def on_right(self, payload):
+            self.index += 1
+
+            embed = discord.Embed(color=0xed0467, title="Recomendação:", description=self.list[self.index])
+            await self.message.edit(embed=embed)
+
+        @menus.button('<:play:826197809098653746>')
+        async def on_play(self, payload):
+            cogay = self.client.get_cog("Audio")
+            if cogay.in_voice_channel(self.ctx):
+                await cogay.ensure_voice(ctx=self.ctx)
+                await cogay.play(ctx=self.ctx, query=self.list[self.index])
+
+    @commands.command(aliases=["mr"])
+    @commands.cooldown(1, 60, commands.BucketType.member)
+    async def musicrecommender(self, ctx, *, artists):
+        artists = artists.split(',')
+        recommend = self.Musicrecommend(ctx, artists, self.client)
+        await recommend.start(ctx)
 
 
 def setup(client):
