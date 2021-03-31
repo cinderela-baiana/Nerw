@@ -8,9 +8,6 @@ import discord
 import aiohttp
 import time
 import textwrap
-import requests
-import os
-
 
 MEMEMAN_IMG = "https://i.ibb.co/4YmHZCm/cumm.png"
 FONT_LIMIT = 31 # depende muito da fonte e do tamanho usado.
@@ -33,18 +30,19 @@ class ImageCog(commands.Cog, name="Imagens"):
             async with session.get(MEMEMAN_IMG) as request:
                 self._mememan_bytes = await request.read()
                 return self._mememan_bytes
+
     @commands.command()
     @commands.cooldown(1, 15, commands.BucketType.member)
     async def tpdne(self, ctx):
-        pickImage=requests.get('https://thispersondoesnotexist.com/image')
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://thispersondoesnotexist.com/image") as request:
+                pickImage = await request.read()
 
+        with open("CacheAttachment/ResultTPDNE.jpeg","wb") as result:
+            result.write(pickImage)
 
-        with open("ResultTPDNE.jpeg","wb") as result:
-        pickImage.encoding = 'utf-8'
-        result.write(pickImage.content)
-        result.close()
-        await ctx.reply(file=discord.File(result, filename="Resultado"))
-        
+        await ctx.reply(file=discord.File("CacheAttachment/ResultTPDNE.jpeg", filename="Resultado.jpg"))
+
     @commands.command()
     @commands.cooldown(1, 30, commands.BucketType.member)
     async def mememan(self, ctx, *, text: str):
@@ -256,5 +254,6 @@ class ImageCog(commands.Cog, name="Imagens"):
                 await ctx.reply(file=file)
             else:
                 await ctx.reply(f"Mucho texto, diminui isso aí pra {textlimit} caracteres")
+
 def setup(client):
     client.add_cog(ImageCog(client))
