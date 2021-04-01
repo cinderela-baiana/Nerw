@@ -6,7 +6,6 @@ import discord
 
 class Help(commands.Cog, name="Ajuda"):
     def __init__(self, client: commands.Bot):
-        self.prefix = bot.get_prefix()
         self.client = client
 
     def get_command_help(self, ctx, command):
@@ -69,18 +68,19 @@ class Help(commands.Cog, name="Ajuda"):
                 eb = discord.Embed(color=0x04c312)
             else:
                 eb = discord.Embed(color=0xed0467)
-            eb.description = f"Prefixo no servidor: `{self.prefix}`"
-            eb.set_author(name="Clique aqui para me adicionar ao seu servidor!", url=url, icon_url= self.client.user.avatar_url)
-            eb.add_field(name="**Diversão:**", value="enviar | chatbot | selfmute | banrandom | snipe | kickrandom | textão | oibot", inline=False)
-            eb.add_field(name="**Música:**", value="play | pause | leave | resume | queue | playdownload ",
-                            inline=False)
-            eb.add_field(name="**Utilidades:**",
-                            value="shazam | ban | nick | botinfo | domin | kick | mover_mensagem | ping | tempo | invite",
-                            inline=False)
-            eb.add_field(name="**Imagens:**", value=" sus | marry | mememan | xvidros", inline=False)
-            eb.add_field(name="**Xadrez:**", value="xadrez_iniciar | xadrez_rank | xadrez | xadrez_espectar\n⠀⠀⠀⠀⠀⠀⠀",
-                            inline=False)
-            eb.set_footer(text=f"Use {self.prefix}help <comando> para mais informações.")
+
+            prefix = await self.client.get_prefix(ctx.message)
+            eb.description = f"Prefixo no servidor: `{prefix}`"
+            eb.set_author(name="Clique aqui para me adicionar ao seu servidor!", url=url,
+                          icon_url=self.client.user.avatar_url)
+
+            # comandos do embed
+            for cog_name, cog in self.client.cogs.items():
+                _map = map(lambda command : command.name, cog.get_commands())
+                eb.add_field(name=cog_name, value=" | ".join(_map))
+
+            # TODO: fazer isso ser compatível com bots que não fazem parte
+            # TODO: de times.
             appinfo = await self.client.application_info()
             if ctx.author.id in list(map(lambda user : user.id, appinfo.team.members)):
                 filt = filter(lambda command: command.hidden, self.client.commands)
