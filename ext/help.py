@@ -1,8 +1,14 @@
 from discord.ext import commands
 from typing import Optional
 from copy import deepcopy
-import bot
 import discord
+import yaml
+
+with open("config/credentials.yaml") as fp:
+    cred = yaml.safe_load(fp)
+
+def is_canary():
+    return cred.get("ENVIROMENT", "CANARY") == "CANARY"
 
 class Help(commands.Cog, name="Ajuda"):
     def __init__(self, client: commands.Bot):
@@ -64,12 +70,10 @@ class Help(commands.Cog, name="Ajuda"):
         if cmd is None:
             permissions = discord.Permissions(administrator=True)
             url = discord.utils.oauth_url(self.client.user.id, permissions)
-            if bot.is_canary():
-                eb = discord.Embed(color=0x04c312)
-            else:
-                eb = discord.Embed(color=0xed0467)
 
-            prefix = await self.client.get_prefix(ctx.message)
+            eb = discord.Embed(color=0xed0467)
+
+            prefix = ctx.prefix
             eb.description = f"Prefixo no servidor: `{prefix}`"
             eb.set_author(name="Clique aqui para me adicionar ao seu servidor!", url=url,
                           icon_url=self.client.user.avatar_url)
@@ -79,10 +83,13 @@ class Help(commands.Cog, name="Ajuda"):
                 _map = map(lambda command : command.name, cog.get_commands())
                 eb.add_field(name=cog_name, value=" | ".join(_map))
 
-            # TODO: fazer isso ser compatível com bots que não fazem parte
-            # TODO: de times.
             appinfo = await self.client.application_info()
-            if ctx.author.id in list(map(lambda user : user.id, appinfo.team.members)):
+            if appinfo.team:
+                condition = ctx.author.id in list(map(lambda user : user.id, appinfo.team.members))
+            else:
+                condition = appinfo.owner.id == ctx.author.id
+
+            if condition:
                 filt = filter(lambda command: command.hidden, self.client.commands)
                 cmds = list(map(lambda command: f"`{command.name}`", filt))
                 all_commands = " | ".join(cmds)
