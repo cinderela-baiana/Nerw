@@ -489,8 +489,7 @@ class Chess(commands.Cog, name="Xadrez"):
                         try:
                             diff = brd[alias[ctx.author.id]].difficulty
 
-                            result = \
-                                await self._play(tab, chess.engine.Limit(time=3), options={'Skill Level': diff})
+                            result = self.engine.play(tab, chess.engine.Limit(time=3), options={'Skill Level': diff})
                             tab.push(result.move)
                             await self.imageboard(ctx, tab, result.move)
 
@@ -525,7 +524,7 @@ class Chess(commands.Cog, name="Xadrez"):
         loop = asyncio.get_event_loop()
         future = await loop.run_in_executor(None, partial)
 
-        return await future
+        return future
 
     async def end_match(self, ctx, winner=None):
         # lógica compartilhada quando uma partida é encerrada.
@@ -627,7 +626,7 @@ class Chess(commands.Cog, name="Xadrez"):
             except asyncio.TimeoutError:
                 pass
             else:
-                if ctx.author.id == brd[alias[ctx.author.id]].white:
+                if ctx.author.id == brd[ctx.author.id].white:
                     await self.end_match(ctx, brd[alias[ctx.author.id]].black)
                 else:
                     await self.end_match(ctx, brd[alias[ctx.author.id]].white)
@@ -636,10 +635,7 @@ class Chess(commands.Cog, name="Xadrez"):
             # por algum motivo esse pedaço de código é executado
             # quando o canal é deletado no end_match e por causa disso o discord.py joga um
             # NotFound.
-            try:
-                await ctx.reply("Você não tem uma partida em andamento. Inicie uma com `,xadin`.")
-            except discord.NotFound:
-                return
-
+            pass # fodase
+        
 def setup(client):
     client.add_cog(Chess(client))
