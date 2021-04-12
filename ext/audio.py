@@ -113,7 +113,7 @@ class Audio(commands.Cog):
             if player is not None:
                 time.sleep(5)
                 ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
-            asyncio.create_task(self.embed(ctx, data, player, playing=True))
+            asyncio.run_coroutine_threadsafe(self.embed(ctx, data, player, playing=True), self.client.loop)
         except AttributeError:
             self.currently_playing = None
 
