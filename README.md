@@ -1,4 +1,6 @@
-# BotGamera
+<p align="center">
+  <b>Nerw</b><br>
+  
 <p align="center">
   <a href="https://discord.gg/zHAFwpFtYz">
     <img src="https://discord.com/api/guilds/790744527450800139/widget.png?style=shield" alt="Discord Server">
