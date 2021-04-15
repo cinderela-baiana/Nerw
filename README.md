@@ -1,5 +1,5 @@
 <p align="center">
-  <b>Nerw</b><br>
+  # Nerw
   
 <p align="center">
   <a href="https://discord.gg/zHAFwpFtYz">
