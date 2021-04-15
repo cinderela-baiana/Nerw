@@ -3,7 +3,9 @@
   <a href="https://discord.gg/zHAFwpFtYz">
     <img src="https://discord.com/api/guilds/790744527450800139/widget.png?style=shield" alt="Discord Server">
   </a>
-  ![Lines of code](https://img.shields.io/tokei/lines/github/cinderela-baiana/nerw?label=linhas%20de%20c%C3%B3digo)
+  <a>
+    <img src="https://img.shields.io/tokei/lines/github/cinderela-baiana/nerw?label=linhas%20de%20c%C3%B3digo">
+  </a>
 
 ## Como configurar o bot
 
