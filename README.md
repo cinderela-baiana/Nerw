@@ -1,7 +1,7 @@
 # BotGamera
 
 ![Lines of code](https://img.shields.io/tokei/lines/github/cinderela-baiana/nerw?label=linhas%20de%20c%C3%B3digo)
-![Discord](https://img.shields.io/discord/790744527450800139?color=fc035e&label=Discord&logo=discord&logoColor=fc035e&style=flat-square)
+![Discord](https://img.shields.io/discord/790744527450800139?color=fc035e&label=Discord&logo=discord&logoColor=fc035e)
 
 ## Como configurar o bot
 
