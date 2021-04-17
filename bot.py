@@ -103,13 +103,22 @@ async def remove_snipes():
         except IndexError:
             pass
 
+@tasks.loop(minutes=30)
+async def clear_file_cache():
+    for file in os.listdir("CacheAttachment"):
+        if file != "README.txt":
+            try:
+                os.remove(f"CacheAttachment/{file}")
+            except OSError: # "o arquivo já está sendo usado por outro processo"
+                continue
+
 @client.event
 async def on_ready():
     logging.info('Bot pronto como ' + str(client.user) + " (" + str(client.user.id) + ")")
     if not hasattr(client, "chat_thread"):
         client.chat_thread = ChatterThread()
         client.chat_thread.start()
-        
+    clear_file_cache.start()
     client.last_statements = {}
     presence_setter.start()
     remove_snipes.start()
