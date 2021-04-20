@@ -3,7 +3,6 @@ import asyncio
 import youtube_dl
 import logging
 import aiohttp
-import time
 import yaml
 
 from emoji import emojize
@@ -104,16 +103,14 @@ class Audio(commands.Cog):
 
     def truncate_queue(self, ctx):
         try:
-            if ctx.voice_client is None:
-                return
-            queue = self.queues[ctx.guild.id]
-            player = queue.get_next_video()
-            data = player.data
-            self.currently_playing = player
-            if player is not None:
-                time.sleep(5)
-                ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
-            asyncio.run_coroutine_threadsafe(self.embed(ctx, data, player, playing=True), self.client.loop)
+            if ctx.voice_client is not None and not ctx.voice_client.is_playing():
+                queue = self.queues[ctx.guild.id]
+                player = queue.get_next_video()
+                data = player.data
+                self.currently_playing = player
+                if player is not None:
+                    ctx.voice_client.play(player, after=lambda _: self.truncate_queue(ctx))
+                asyncio.run_coroutine_threadsafe(self.embed(ctx, data, player, playing=True), self.client.loop)
         except AttributeError:
             self.currently_playing = None
 
@@ -138,7 +135,6 @@ class Audio(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.member)
     async def play(self, ctx: commands.Context, *, query: str):
         """Toca uma música via streaming.
-
         É mais recomendando usar esse comando no bot estável, já que
         vai ter menos chances de bufferings e travadas. Você ganha
         rapidez ao carregar a música, mas ao custo de estabilidade.
@@ -151,7 +147,7 @@ class Audio(commands.Cog):
                     return await ctx.reply(f"O termo ou URL não corresponde a nenhum vídeo." 
                                            " Tenta usar termos mais vagos na próxima vez.")
             self.queue_song(ctx, player, data)
-            if self.currently_playing is None:
+            if self.currently_playing is None and not ctx.voice_client.is_playing():
                 self.truncate_queue(ctx)
             else:
                 await self.embed(ctx, data, player)
@@ -190,7 +186,6 @@ class Audio(commands.Cog):
         Toca uma música baixando ela. O tempo máximo para vídeos
         usando esse comando é de trinta minutos, para vídeos maiores,
         veja o comando `,play`.
-
         É mais recomendado usar esse comando no bot canário, já que
         vai ser mais rápido pra tocar (não baixar). Você ganha
         estabilidade, ao custo de rapidez.
@@ -241,6 +236,7 @@ class Audio(commands.Cog):
 
     @commands.command()
     async def pause(self, ctx):
+        """Pausa a música"""
         emoji = emojize(":pause_button:", use_aliases=True)
         if await self.in_voice_channel(ctx):
             if not ctx.voice_client.is_playing():
@@ -250,6 +246,7 @@ class Audio(commands.Cog):
 
     @commands.command()
     async def resume(self, ctx):
+        """Retoma a música."""
         emoji = emojize(":play_or_pause_button:", use_aliases=True)
         if await self.in_voice_channel(ctx):
             if ctx.voice_client.is_playing():
@@ -259,6 +256,7 @@ class Audio(commands.Cog):
 
     @commands.command(aliases=["s"])
     async def skip(self, ctx):
+        """Pula a música."""
         if await self.in_voice_channel(ctx):
             try:
                 ctx.voice_client.stop()
@@ -268,6 +266,7 @@ class Audio(commands.Cog):
 
     @commands.command(name="queue", aliases=["q"])
     async def get_queue(self, ctx):
+        """Mostra a fila de músicas."""
         try:
             queue = self.queues[ctx.guild.id]
             scm = f"**1. {self.currently_playing.title} - {self.currently_playing.duration}**"
@@ -327,14 +326,17 @@ class Audio(commands.Cog):
         @menus.button('<:play:826197809098653746>')
         async def on_play(self, payload):
             cogay = self.client.get_cog("Audio")
-            if cogay.in_voice_channel(self.ctx):
+            if await cogay.in_voice_channel(self.ctx):
                 await cogay.ensure_voice(ctx=self.ctx)
                 await cogay.play(ctx=self.ctx, query=self.list[self.index])
 
     @commands.command(aliases=["mr"])
     @commands.cooldown(1, 60, commands.BucketType.member)
-    async def musicrecommender(self, ctx, *, artists):
-        artists = artists.split(',')
+    async def musicrecommender(self, ctx, *, artistas):
+        """Gera recomendações de músicas personalizadas para você, baseado nos artistas que você gosta.
+        Caso queira colocar mais de um artista, separe por vírgulas.
+        Ex: Barões da Pesadinha, Zeca Paugordinho, Pablo Vomittar, Chitãozinho e só loló, Pita-Umzinho & Cheira pó"""
+        artists = artistas.split(',')
         recommend = self.Musicrecommend(ctx, artists, self.client)
         await recommend.start(ctx)
 
