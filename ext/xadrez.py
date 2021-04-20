@@ -1,10 +1,7 @@
-﻿import chess
-import discord
+﻿import discord
 import random
 import emoji
-import logging
-import chess.svg
-import chess.engine
+import chess, chess.engine, chess.svg
 import secrets
 import os
 import warnings
@@ -336,7 +333,7 @@ class Chess(commands.Cog, name="Xadrez"):
             return await ctx.reply(f'{CROSS_EMOJI} Você já tem uma partida em andamento.')
 
         if userplayer != ctx.author:  # and userplayer != client.user.id:
-            if userplayer != "computador" and isinstance(userplayer, discord.Member):
+            if isinstance(userplayer, discord.Member):
                 mensagem = await ctx.send(
                     f'Ok, agora aguarde que o usuário {userplayer.mention} reaja à esta mensagem.')
                 await mensagem.add_reaction("👍")
@@ -356,7 +353,7 @@ class Chess(commands.Cog, name="Xadrez"):
 
             mentions = f"{ctx.author.mention}"
             dificuldade = 0
-            if userplayer != 'computador':
+            if userplayer.casefold() != 'computador':
                 mentions += f" {userplayer.mention} "
 
             else:
