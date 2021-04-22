@@ -43,10 +43,13 @@ class Playlist:
 
         item = self._deque.popleft()
         return item
-
+    
+    def remove(self, index):
+        del self._deque[index]
+    
     def clear(self):
         self._deque.clear()
-
+    
     @property
     def currently_playing(self):
         try:

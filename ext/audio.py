@@ -11,6 +11,8 @@ from Utils import HALF_HOUR_IN_SECS
 from errors import VideoDurationOutOfBounds
 from ext._audio import Playlist
 from Utils import CROSS_EMOJI
+from Utils import CHECK_EMOJI_ANIMATED
+
 from recommender.api import Recommender
 
 
@@ -264,19 +266,29 @@ class Audio(commands.Cog):
                 pass
             self.truncate_queue(ctx)
 
+    @commands.command(aliases=["r"])
+    async def remove(self, ctx, index):
+        """Remove um item da fila."""
+        try:
+            queue = self.queues[ctx.guild.id]
+            queue.remove(int(index)-1)
+            await ctx.message.add_reaction(CHECK_EMOJI_ANIMATED)
+        except IndexError:
+            await ctx.reply("Não há nada na fila com essa posição.")
+
     @commands.command(name="queue", aliases=["q"])
     async def get_queue(self, ctx):
         """Mostra a fila de músicas."""
         try:
             queue = self.queues[ctx.guild.id]
-            scm = f"**1. {self.currently_playing.title} - {self.currently_playing.duration}**"
+            scm = f"**{self.currently_playing.title} - {self.currently_playing.duration}**"
         except Exception:
             return await ctx.reply("Não existe nenhuma fila de músicas nesse servidor.\n"
                                    "Tente adicionar músicas usando o comando `,play`.")
         scheme = []
         scm += " **(Atualmente reproduzindo)**"
         scheme.append(scm)
-        i = 1
+        i = 0
         for video in queue:
             i += 1
             scm = f"{i}. {video.title} - {video.duration}"
