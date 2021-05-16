@@ -69,9 +69,9 @@ def load_all_extensions(*, folder=None):
 def get_all_extensions(*, folder=None):
     if folder is None:
         folder = "ext"
-    filt = filter(lambda fold: fold.endswith(".py") and not fold.startswith("_"), os.listdir(folder))
+    filt = filter(lambda fold: fold.endswith(".py") and not fold.startswith("_"), os.listdir(os.path.join("src", folder)))
     for file in filt:
-        r = f"{folder}.{file.replace('.py', '')}"
+        r = f"{folder}.{file.replace('.py', '')}".replace("/", ".")
         yield r
 
 load_all_extensions()
@@ -344,7 +344,7 @@ async def botinfo(ctx):
     hum_hdd_busy = humanize.filesize.naturalsize(hdd.total)
 
     embed = discord.Embed(title="Informações técnicas sobre o bot.", color=discord.Color.orange())
-    embed.description = "Veja o meu [código fonte](https://github.com/joao-0213/BotGamera)."
+    embed.description = "Veja o meu [código fonte](https://github.com/cinderela-baiana/nerw)."
 
     embed.add_field(name="Porcentagem de uso dos núcleos", value=threads, inline=True)
     embed.add_field(name="Memória RAM", value=memstr, inline=True)

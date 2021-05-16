@@ -14,15 +14,17 @@ from Utils import CROSS_EMOJI
 from Utils import CHECK_EMOJI_ANIMATED
 
 from recommender.api import Recommender
-
+logger = logging.getLogger(__name__)
 
 with open("config/credentials.yaml") as fp:
     credentials = yaml.safe_load(fp)
+try:
+    spotifyid = credentials["SPOTIFY_CLIENT_ID"]
+    spotifysecret = credentials["SPOTIFY_SECRET"]
+except KeyError:
+    logger.warning("Os valores SPOTIFY_CLIENT_ID e SPOTIFY_SECRET não foram definidos, o comando `mr` não irá funcionar.")
 
-spotifyid = credentials["SPOTIFY_CLIENT_ID"]
-spotifysecret = credentials["SPOTIFY_SECRET"]
 
-logger = logging.getLogger(__name__)
 youtube_dl.utils.bug_reports_message = lambda: ''
 
 ytdl_format_options = {

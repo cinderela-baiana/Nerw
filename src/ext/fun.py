@@ -2,7 +2,6 @@
 from geopy.geocoders import Nominatim
 from typing import *
 from chatter_thread import ChatterThread
-from ShazamAPI import Shazam
 
 from icrawler.builtin import GoogleImageCrawler
 import discord
@@ -12,12 +11,20 @@ import random
 import humanize
 import datetime
 import aiohttp
+import logging
 import yarl
 import yaml
 import os
+import mcstatus
+
+logger = logging.Logger(__name__)
 
 with open("config/credentials.yaml") as fp:
-    apitempo = yaml.load(fp)["OPENSTREETMAP_KEY"]
+    try:
+        apitempo = yaml.load(fp)["OPENSTREETMAP_KEY"]
+    except KeyError:
+        logger.warning("A chave 'OPENSTREETMAP_KEY' não foi encontrada no credentials.yaml, ignorando.")
+        apitempo = None
 
 tempourl = "https://api.openweathermap.org/data/2.5/onecall?"
 geolocator = Nominatim(user_agent='GameraBot')
@@ -347,6 +354,8 @@ class Misc(commands.Cog):
     async def tempo(self, ctx, *, cidade: str):
         """Verifica o tempo atual na sua cidade
            """
+        if apitempo is None:
+            return
         cidade = cidade.title()
 
         if cidade.startswith('Cidade do'):
@@ -365,6 +374,21 @@ class Misc(commands.Cog):
 
             await w.start(ctx)
             del request
+
+    @commands.command()
+    @commands.cooldown(1, 15, commands.BucketType.member)
+    async def mcstatus(self, ctx, ip: str):
+        server = mcstatus.MinecraftServer.lookup(ip)
+        try:
+            status = await server.async_status()
+        except asyncio.TimeoutError:
+            return await ctx.reply("Não foi possível receber as informações sobre esse servidor"
+                    " (Você tem certeza que esse IP aponta para um servidor válido?)")
+
+        embed = discord.Embed(title=f"Informações sobre o servidor {ip}", color=discord.Color.green())
+        embed.add_field(name="MOTD", value=status.description, inline=True)
+        embed.add_field(name="Quantidade de jogadores", value=f"{status.players.online}/{status.players.max}", inline=True)
+        await ctx.reply(embed=embed)
 
     @commands.command()
     async def invite(self, ctx):
