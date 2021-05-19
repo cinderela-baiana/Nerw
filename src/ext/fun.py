@@ -2,8 +2,9 @@
 from geopy.geocoders import Nominatim
 from typing import *
 from chatter_thread import ChatterThread
-
 from icrawler.builtin import GoogleImageCrawler
+from ShazamAPI import Shazam
+
 import discord
 import subprocess
 import asyncio
@@ -448,42 +449,39 @@ class Misc(commands.Cog):
     @commands.cooldown(1, 18, commands.BucketType.member)
     async def shazam(self, ctx, data: Optional[str]):
         async with ctx.typing():
-            try:
-                if data is None and not ctx.message.attachments:
-                    cmd = self.client.get_command("help")
-                    return await ctx.invoke(cmd, cmd=ctx.command.name)
-
-                if ctx.message.attachments:
-                    if not ctx.message.attachments[0].width == None:
-                        attachment = ctx.message.attachments[0]
-                        await self.vidconvert(attachment=attachment)
-                        with open("output-audio.mp3", "rb") as fp:
-                            data = fp.read()
-                    else:
-                        data = ctx.message.attachments[0]
-                        data = await data.read()
+            
+            if data is None and not ctx.message.attachments:
+                cmd = self.client.get_command("help")
+                return await ctx.invoke(cmd, cmd=ctx.command.name)
+            if ctx.message.attachments:
+                if not ctx.message.attachments[0].width == None:
+                    attachment = ctx.message.attachments[0]
+                    await self.vidconvert(attachment=attachment)
+                    with open("output-audio.mp3", "rb") as fp:
+                        data = fp.read()
                 else:
-                    url = yarl.URL(data)
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(url) as request:
-                            data = await request.read()
-
-                shaz = (await self._shazam(data))
-                image = shaz['track']['images']['coverart']
-                youtube = shaz['track']['sections'][2]['youtubeurl']
+                    data = ctx.message.attachments[0]
+                    data = await data.read()
+            else:
+                url = yarl.URL(data)
                 async with aiohttp.ClientSession() as session:
-                    requesturl = await session.get(youtube)
-                    urljson = await requesturl.json()
-                    async with session.get(image) as request:
-                        imageread = await request.read()
-                url = urljson['actions'][0]['uri']
+                    async with session.get(url) as request:
+                        data = await request.read()
 
-                colors = self.client.get_cog("Imagens").get_colors(image=imageread)
-                color = discord.Color.from_rgb(*colors[0])
-                matches = shaz['track']['share']
-                await ctx.reply(embed = discord.Embed(title='Achei!~~(espero que esteja certo)~~', description= f"Essa música parece ser **{matches['subject']}**.",colour=color, url= url).set_image(url=image))
-            except:
-                await ctx.reply('Xiiiiiiiii, não achei a música.')
+            shaz = (await self._shazam(data))
+            image = shaz['track']['images']['coverart']
+            youtube = shaz['track']['sections'][2]['youtubeurl']
+            async with aiohttp.ClientSession() as session:
+                requesturl = await session.get(youtube)
+                urljson = await requesturl.json()
+                async with session.get(image) as request:
+                    imageread = await request.read()
+            url = urljson['actions'][0]['uri']
+
+            colors = self.client.get_cog("Imagens").get_colors(image=imageread)
+            color = discord.Color.from_rgb(*colors[0])
+            matches = shaz['track']['share']
+            await ctx.reply(embed = discord.Embed(title='Achei!~~(espero que esteja certo)~~', description= f"Essa música parece ser **{matches['subject']}**.",colour=color, url= url).set_image(url=image))
 
     async def _shazam(self, data: bytes):
         shazam = Shazam(data)

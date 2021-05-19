@@ -18,3 +18,4 @@ music-recommender
 twemoji-parser
 icrawler
 mcstatus
+ShazamAPI
