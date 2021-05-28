@@ -1,14 +1,47 @@
-from discord.ext import commands
-from typing import Optional
+from discord.ext import commands, menus
+from typing import Dict, Optional, Iterable
 from copy import deepcopy
 import discord
 import yaml
+import string
 
 with open("config/credentials.yaml") as fp:
     cred = yaml.safe_load(fp)
 
 def is_canary():
     return cred.get("ENVIROMENT", "CANARY") == "CANARY"
+
+class HelpMenu(menus.Menu):
+    def __init__(self, ctx):
+        super().__init__()
+        self.page = 0
+        self.ctx = ctx
+    
+    def get_commands(self) -> discord.Embed:
+        dic = self.ctx.bot.get_cog("Ajuda")._filter_by_letter(self.ctx.bot.commands)
+        char = list(dic.keys())[self.page]
+        com = dic[char]
+
+        embed = discord.Embed(title=f"Comandos começando com {char.upper()}", color=discord.Color.blue())
+        embed.description = desc = " | ".join(map(lambda cmd : cmd.name, com)) or "Não há"
+        return embed
+
+    @menus.button("◀️")
+    async def left_button(self, payload):
+        if self.page > 0:
+            self.page -= 1
+            await self.message.edit(embed=self.get_commands())
+
+    @menus.button("▶️")
+    async def right_button(self, payload):
+        if self.page < 25:
+            self.page += 1
+            await self.message.edit(embed=self.get_commands())
+    
+
+    async def send_initial_message(self, ctx, channel):
+        return await ctx.reply(embed=self.get_commands())
+    
 
 class Help(commands.Cog, name="Ajuda"):
     def __init__(self, client: commands.Bot):
@@ -68,36 +101,8 @@ class Help(commands.Cog, name="Ajuda"):
         """Mostra essa mensagem."""
 
         if cmd is None:
-            permissions = discord.Permissions(administrator=True)
-            url = discord.utils.oauth_url(self.client.user.id, permissions)
-
-            eb = discord.Embed(color=0xed0467)
-
-            prefix = ctx.prefix
-            eb.description = f"Prefixo no servidor: `{prefix}`"
-            eb.set_author(name="Clique aqui para me adicionar ao seu servidor!", url=url,
-                          icon_url=self.client.user.avatar_url)
-
-            # comandos do embed
-            for cog_name, cog in self.client.cogs.items():
-                _map = map(lambda command : command.name, cog.get_commands())
-                eb.add_field(name=cog_name, value=" | ".join(_map))
-
-            appinfo = await self.client.application_info()
-            if appinfo.team:
-                condition = ctx.author.id in list(map(lambda user : user.id, appinfo.team.members))
-            else:
-                condition = appinfo.owner.id == ctx.author.id
-
-            if condition:
-                filt = filter(lambda command: command.hidden, self.client.commands)
-                cmds = list(map(lambda command: f"`{command.name}`", filt))
-                all_commands = " | ".join(cmds)
-
-                hidden_embed = discord.Embed(title=":detective:", description=all_commands)
-                await ctx.author.send(embed=hidden_embed)
-
-            await ctx.reply(embed=eb)
+            men = HelpMenu(ctx)
+            await men.start(ctx)
         else:
             try:
                 command = self.client.get_command(cmd)
@@ -113,6 +118,14 @@ class Help(commands.Cog, name="Ajuda"):
                     await ctx.reply(embed=hlp)
                 except UnboundLocalError:
                     return await ctx.reply(f"Não existe nenhum comando com o nome **{cmd}**.")
+
+    def _filter_by_letter(self, commands: Iterable[commands.Command]) -> Dict[str, Iterable[commands.Command]]:
+        let = {letter: [] for letter in string.ascii_lowercase}
+        for command in commands:
+            name = command.name[0]
+            let[name].append(command)
+        
+        return let
 
 def setup(client):
     client.add_cog(Help(client))
