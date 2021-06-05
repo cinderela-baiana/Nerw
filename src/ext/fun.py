@@ -4,6 +4,7 @@ from typing import *
 from chatter_thread import ChatterThread
 from icrawler.builtin import GoogleImageCrawler
 from ShazamAPI import Shazam
+from multiparser import NewsParser
 
 import discord
 import subprocess
@@ -288,6 +289,15 @@ class Misc(commands.Cog):
         self.client = client
 
     @commands.command()
+    async def news(self, ctx, url: str, channel: Optional[discord.TextChannel]):
+        if channel is None:
+            channel = ctx.channel
+        news = NewsParser(ctx.guild, channel, url)
+        news.start()
+
+        await ctx.reply(f"O canal {channel.mention} foi definido como o canal de feedparser")
+
+    @commands.command()
     async def oibot(self, ctx):
         """Tá carente? Usa esse comando!"""
         await ctx.channel.send('Oieeeeee {}!'.format(ctx.message.author.name))
@@ -295,8 +305,8 @@ class Misc(commands.Cog):
     @commands.command()
     @commands.cooldown(1, 10.0, commands.BucketType.member)
     async def enviar(self, ctx, user: Union[discord.Member, discord.User], *, msg: str):
-        """Envia uma mensagem para a dm da pessoa mencionada.
-        é necessário de que a DM dela esteja aberta."""
+        """Envia uma mensagem para a dm da pessoa mencionada, é necessário de que a DM dela esteja aberta."""
+
         description = """
         Lembre-se de responder a mensagem enviada usando o novo sistema, conforme o
         exemplo abaixo.
@@ -385,6 +395,8 @@ class Misc(commands.Cog):
         except asyncio.TimeoutError:
             return await ctx.reply("Não foi possível receber as informações sobre esse servidor"
                     " (Você tem certeza que esse IP aponta para um servidor válido?)")
+        except OSError:
+            return await ctx.reply("O servidor existe, mas não retornou nenhuma informação.")
 
         embed = discord.Embed(title=f"Informações sobre o servidor {ip}", color=discord.Color.green())
         embed.add_field(name="MOTD", value=status.description, inline=True)
@@ -499,7 +511,7 @@ class Misc(commands.Cog):
         file = discord.File("CacheAttachment/000001.jpg")
 
         await ctx.reply(file=file)
-        os.remove("CacheAttachment/000001.jpg")
+        # os.remove("CacheAttachment/000001.jpg")
 
     # a implementação real do comando img.
     # ela só existe pra ser usado no loop.run_in_executor.
