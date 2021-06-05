@@ -243,6 +243,8 @@ async def on_raw_reaction_remove(struct: discord.RawReactionActionEvent):
 
 @client.event
 async def on_message(message):
+    if client.user.mentioned_in(message):
+        await client.get_cog("Misc").sentimento(ctx=message, frase=message.content)
     await client.process_commands(message)
 
 @client.event

@@ -13,12 +13,22 @@ import humanize
 import datetime
 import aiohttp
 import logging
+import nltk
 import yarl
+import pickle
 import yaml
 import os
 import mcstatus
+import json
 
 logger = logging.Logger(__name__)
+f = open('assets/classifier.pickle', 'rb')
+classificador = pickle.load(f)
+f.close()
+
+with open("assets/freq.json",'r') as f:
+    palavras_unicas_treinamento = json.loads(f.read())
+    palavras_unicas_treinamento = palavras_unicas_treinamento.keys()
 
 with open("config/credentials.yaml") as fp:
     try:
@@ -506,6 +516,34 @@ class Misc(commands.Cog):
     def _crawl(self, content: str):
         crawler = GoogleImageCrawler(storage={"root_dir": "./CacheAttachment"})
         crawler.crawl(content, max_num=1)
+
+    def extrator_palavras(self, documento):
+        doc = set(documento)
+        caracteristicas = {}
+        for palavras in palavras_unicas_treinamento:
+            caracteristicas['%s' % palavras] = (palavras in doc)
+        return caracteristicas
+    
+    @commands.command()
+    async def sentimento(self, ctx, *, frase):
+      tStemming = []
+      stemmer = nltk.stem.RSLPStemmer()
+    
+      for (palavras_treinamento) in frase.split():
+        wStem = [p for p in palavras_treinamento.split()]
+        tStemming.append(str(stemmer.stem(wStem[0])))
+
+      extracted = self.extrator_palavras(tStemming)
+      probs = {}
+      distr = classificador.prob_classify(extracted)
+
+      for classe in distr.samples():
+        probs[classe] = distr.prob(classe)
+        
+      maxprob = max(probs.values())
+      emojis = {"tristeza":"😔 trist","alegria":"😃 eba","raiva":"😡 aff","desgosto":"🤢 urgh","medo":"😨 grrr","diversão":"😂 kkkkk","amor":"😻 gozei"}
+      await ctx.reply(emojis[list(probs.keys())[list(probs.values()).index(maxprob)]])
+
 
 def setup(client):
     client.add_cog(Misc(client))
